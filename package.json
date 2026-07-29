@@ -1,0 +1,19 @@
+{
+  "name": "events-coderhouse",
+  "version": "1.0.0",
+  "description": "API REST para una plataforma de gestión de eventos.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
