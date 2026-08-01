@@ -1,9 +1,9 @@
 import { Router } from "express";
 
-import { getSessions } from "../controllers/sessions.controller.js";
+export const createSessionsRouter = ({ sessionsController }) => {
+  const sessionsRouter = Router();
 
-const sessionsRouter = Router();
+  sessionsRouter.get("/", sessionsController.getSessions);
 
-sessionsRouter.get("/", getSessions);
-
-export default sessionsRouter;
+  return sessionsRouter;
+};

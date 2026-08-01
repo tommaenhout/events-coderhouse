@@ -8,6 +8,7 @@ acceso a datos, los controladores y las rutas.
 
 - Conexión a MongoDB local o MongoDB Atlas.
 - CRUD completo de eventos.
+- CRUD completo de usuarios, separado del módulo de sesiones.
 - Validación de los datos de entrada.
 - Respuestas `400`, `404` y `500` consistentes.
 - Cierre controlado del servidor y de la conexión a MongoDB.
@@ -99,7 +100,18 @@ solamente después de establecer la conexión con MongoDB.
 | `organizer` | `String` | No | Organizador |
 
 Mongoose agrega automáticamente `createdAt` y `updatedAt`. Los campos que no
-pertenecen al modelo son descartados por el controlador.
+pertenecen al modelo son descartados por el servicio.
+
+## Modelo de usuario
+
+| Campo | Tipo | Obligatorio | Descripción |
+| --- | --- | --- | --- |
+| `name` | `String` | Sí | Nombre del usuario |
+| `email` | `String` | Sí | Email único, normalizado a minúsculas |
+| `role` | `String` | No | `user` o `admin`; usa `user` por defecto |
+
+El modelo no contiene contraseñas porque la autenticación todavía está fuera del
+alcance del proyecto.
 
 ## Endpoints
 
@@ -111,9 +123,14 @@ pertenecen al modelo son descartados por el controlador.
 | `POST` | `/api/events` | Crea un evento | `201`, `400` |
 | `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `404` |
 | `DELETE` | `/api/events/:id` | Elimina un evento | `200`, `400`, `404` |
+| `GET` | `/api/users` | Lista todos los usuarios | `200` |
+| `GET` | `/api/users/:id` | Obtiene un usuario | `200`, `400`, `404` |
+| `POST` | `/api/users` | Crea un usuario | `201`, `400`, `409` |
+| `PUT` | `/api/users/:id` | Actualiza uno o más campos | `200`, `400`, `404`, `409` |
+| `DELETE` | `/api/users/:id` | Elimina un usuario | `200`, `400`, `404` |
 | `GET` | `/api/sessions` | Ruta inicial de sesiones | `200` |
 
-Todas las respuestas de eventos usan esta estructura:
+Todas las respuestas de eventos y usuarios usan esta estructura:
 
 ```json
 {
@@ -123,6 +140,26 @@ Todas las respuestas de eventos usan esta estructura:
 ```
 
 Los errores usan `status: "error"` y un campo `message`.
+
+### Estructura inicial de sesiones
+
+`GET /api/sessions` conserva una respuesta vacía y pasa por una estructura
+inyectable de router, controlador y servicio:
+
+```text
+sessions router -> sessions controller -> sessions service
+```
+
+```json
+{
+  "status": "success",
+  "payload": []
+}
+```
+
+Esta estructura no implementa registro, login, contraseñas, JWT, persistencia de
+sesiones, autenticación ni autorización. Es solamente el punto de extensión para
+una entrega futura.
 
 ## Probar la API con curl
 
@@ -187,6 +224,30 @@ Eliminar el evento:
 curl --request DELETE "$BASE_URL/events/$EVENT_ID"
 ```
 
+Crear un usuario:
+
+```bash
+curl --request POST "$BASE_URL/users" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name": "Tom",
+    "email": "tom@example.com",
+    "role": "user"
+  }'
+```
+
+Los demás endpoints de usuarios siguen el mismo patrón del CRUD de eventos:
+
+```bash
+USER_ID="REEMPLAZAR_CON_EL_ID"
+curl "$BASE_URL/users"
+curl "$BASE_URL/users/$USER_ID"
+curl --request PUT "$BASE_URL/users/$USER_ID" \
+  --header "Content-Type: application/json" \
+  --data '{"name":"Tom actualizado"}'
+curl --request DELETE "$BASE_URL/users/$USER_ID"
+```
+
 ## Arquitectura e inyección de dependencias
 
 `server.js` funciona como raíz de composición y conecta las capas:
@@ -195,6 +256,8 @@ curl --request DELETE "$BASE_URL/events/$EVENT_ID"
 Mongoose -> database
 Event model -> event DAO -> event repository -> events service
              -> events controller -> events router -> app
+User model  -> user DAO  -> user repository  -> users service
+             -> users controller  -> users router  -> app
 ```
 
 - `database` recibe el cliente de Mongoose y la configuración de conexión.
@@ -203,6 +266,10 @@ Event model -> event DAO -> event repository -> events service
 - `eventService` recibe el repositorio y aplica validación y reglas de negocio.
 - `eventsController` recibe el servicio y traduce sus resultados a HTTP.
 - `eventsRouter` recibe el controlador.
+- El módulo de usuarios replica las mismas capas para mantener su persistencia y
+  sus reglas independientes de eventos y sesiones.
+- El módulo inicial de sesiones inyecta `sessionsService` en
+  `sessionsController` y este último en `sessionsRouter`.
 - `errorHandler` centraliza los errores de Express y recibe el logger.
 - `app` recibe los routers y configura el middleware de errores.
 - `startApplication` recibe la aplicación, la base de datos y el puerto.
@@ -226,21 +293,29 @@ events-coderhouse/
 │   ├── controllers/
 │   │   ├── events.controller.js
 │   │   ├── health.controller.js
-│   │   └── sessions.controller.js
+│   │   ├── sessions.controller.js
+│   │   └── users.controller.js
 │   ├── dao/
-│   │   └── events.dao.js
+│   │   ├── events.dao.js
+│   │   └── users.dao.js
+│   ├── errors/
+│   │   └── users.errors.js
 │   ├── middlewares/
 │   │   └── errorHandler.js
 │   ├── models/
 │   │   ├── Event.js
 │   │   └── User.js
 │   ├── repositories/
-│   │   └── events.repository.js
+│   │   ├── events.repository.js
+│   │   └── users.repository.js
 │   ├── routes/
 │   │   ├── events.router.js
-│   │   └── sessions.router.js
+│   │   ├── sessions.router.js
+│   │   └── users.router.js
 │   ├── services/
-│   │   └── events.service.js
+│   │   ├── events.service.js
+│   │   ├── sessions.service.js
+│   │   └── users.service.js
 │   └── utils/
 │       └── pickFields.js
 ├── test/
@@ -251,7 +326,13 @@ events-coderhouse/
 │   ├── events.repository.test.js
 │   ├── events.service.test.js
 │   ├── pickFields.test.js
-│   └── startApplication.test.js
+│   ├── sessions.controller.test.js
+│   ├── sessions.service.test.js
+│   ├── startApplication.test.js
+│   ├── users.controller.test.js
+│   ├── users.dao.test.js
+│   ├── users.repository.test.js
+│   └── users.service.test.js
 ├── .env.example
 ├── package.json
 └── README.md
@@ -272,5 +353,5 @@ ciclo de vida de la aplicación. No leen `.env` ni se conectan a MongoDB Atlas.
 
 - Autenticación y emisión de JWT.
 - Autorización por roles.
-- CRUD de usuarios y sesiones.
+- Persistencia real de sesiones cuando se incorpore autenticación.
 - Paginación y filtros para eventos.
