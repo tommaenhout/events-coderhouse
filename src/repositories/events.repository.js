@@ -1,25 +1,21 @@
-export const createEventRepository = ({ EventModel }) => ({
+export const createEventRepository = ({ eventDao }) => ({
   findAll() {
-    return EventModel.find().lean();
+    return eventDao.findAll();
   },
 
   findById(id) {
-    return EventModel.findById(id).lean();
+    return eventDao.findById(id);
   },
 
-  async create(eventData) {
-    const event = await EventModel.create(eventData);
-    return event.toObject();
+  create(eventData) {
+    return eventDao.create(eventData);
   },
 
   updateById(id, eventData) {
-    return EventModel.findByIdAndUpdate(id, eventData, {
-      new: true,
-      runValidators: true,
-    }).lean();
+    return eventDao.updateById(id, eventData);
   },
 
   deleteById(id) {
-    return EventModel.findByIdAndDelete(id).lean();
+    return eventDao.deleteById(id);
   },
 });

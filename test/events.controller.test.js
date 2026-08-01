@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createEventsController } from "../src/controllers/events.controller.js";
+import {
+  EventNotFoundError,
+  EventValidationError,
+} from "../src/services/events.service.js";
 
 const createResponse = () => {
   const result = {};
@@ -19,14 +23,10 @@ const createResponse = () => {
   return { response, result };
 };
 
-test("getEvents uses the injected repository", async () => {
+test("getEvents uses the injected service", async () => {
   const expectedEvents = [{ title: "Injected event" }];
-  const eventRepository = {
-    async findAll() {
-      return expectedEvents;
-    },
-  };
-  const controller = createEventsController({ eventRepository });
+  const eventService = { getEvents: async () => expectedEvents };
+  const controller = createEventsController({ eventService });
   const { response, result } = createResponse();
 
   await controller.getEvents({}, response, assert.fail);
@@ -37,14 +37,14 @@ test("getEvents uses the injected repository", async () => {
   });
 });
 
-test("getEvents forwards repository errors", async () => {
+test("controller forwards unexpected service errors", async () => {
   const expectedError = new Error("database unavailable");
-  const eventRepository = {
-    async findAll() {
+  const eventService = {
+    async getEvents() {
       throw expectedError;
     },
   };
-  const controller = createEventsController({ eventRepository });
+  const controller = createEventsController({ eventService });
   let forwardedError;
 
   await controller.getEvents({}, {}, (error) => {
@@ -56,13 +56,13 @@ test("getEvents forwards repository errors", async () => {
 
 test("getEventById returns an event", async () => {
   const expectedEvent = { _id: "event-id", title: "Conference" };
-  const eventRepository = {
-    async findById(id) {
+  const eventService = {
+    async getEventById(id) {
       assert.equal(id, "event-id");
       return expectedEvent;
     },
   };
-  const controller = createEventsController({ eventRepository });
+  const controller = createEventsController({ eventService });
   const { response, result } = createResponse();
 
   await controller.getEventById(
@@ -77,10 +77,13 @@ test("getEventById returns an event", async () => {
   });
 });
 
-test("getEventById returns 404 when the event does not exist", async () => {
-  const controller = createEventsController({
-    eventRepository: { findById: async () => null },
-  });
+test("controller maps missing events to 404", async () => {
+  const eventService = {
+    async getEventById() {
+      throw new EventNotFoundError();
+    },
+  };
+  const controller = createEventsController({ eventService });
   const { response, result } = createResponse();
 
   await controller.getEventById({ params: { id: "missing" } }, response, assert.fail);
@@ -91,24 +94,19 @@ test("getEventById returns 404 when the event does not exist", async () => {
   });
 });
 
-test("createEvent validates and creates an event", async () => {
+test("createEvent passes request data to the service", async () => {
   const requestBody = {
     title: "Conference",
     date: "2026-09-01T18:00:00.000Z",
-    ignored: "not persisted",
   };
   const expectedEvent = { _id: "event-id", ...requestBody };
-  delete expectedEvent.ignored;
-  const eventRepository = {
-    async create(eventData) {
-      assert.deepEqual(eventData, {
-        title: requestBody.title,
-        date: requestBody.date,
-      });
+  const eventService = {
+    async createEvent(eventData) {
+      assert.equal(eventData, requestBody);
       return expectedEvent;
     },
   };
-  const controller = createEventsController({ eventRepository });
+  const controller = createEventsController({ eventService });
   const { response, result } = createResponse();
 
   await controller.createEvent({ body: requestBody }, response, assert.fail);
@@ -119,64 +117,54 @@ test("createEvent validates and creates an event", async () => {
   });
 });
 
-test("createEvent rejects missing required fields", async () => {
-  const controller = createEventsController({ eventRepository: {} });
+test("controller maps service validation errors to 400", async () => {
+  const eventService = {
+    async createEvent() {
+      throw new EventValidationError("Datos inválidos");
+    },
+  };
+  const controller = createEventsController({ eventService });
   const { response, result } = createResponse();
 
-  await controller.createEvent({ body: { title: "Conference" } }, response, assert.fail);
+  await controller.createEvent({ body: {} }, response, assert.fail);
 
   assert.deepEqual(result, {
     statusCode: 400,
-    body: {
-      status: "error",
-      message: "Los campos title y date son obligatorios",
-    },
+    body: { status: "error", message: "Datos inválidos" },
   });
 });
 
-test("updateEvent updates only accepted fields", async () => {
-  const updatedEvent = { _id: "event-id", title: "Updated" };
-  const eventRepository = {
-    async updateById(id, eventData) {
-      assert.equal(id, "event-id");
-      assert.deepEqual(eventData, { title: "Updated" });
-      return updatedEvent;
+test("updateEvent and deleteEvent pass IDs to the service", async () => {
+  const calls = [];
+  const eventService = {
+    async updateEvent(id, data) {
+      calls.push(["updateEvent", id, data]);
+      return { _id: id, ...data };
+    },
+    async deleteEvent(id) {
+      calls.push(["deleteEvent", id]);
+      return { _id: id };
     },
   };
-  const controller = createEventsController({ eventRepository });
-  const { response, result } = createResponse();
+  const controller = createEventsController({ eventService });
+  const updateResponse = createResponse();
+  const deleteResponse = createResponse();
 
   await controller.updateEvent(
-    { params: { id: "event-id" }, body: { title: "Updated", owner: "ignored" } },
-    response,
+    { params: { id: "event-id" }, body: { title: "Updated" } },
+    updateResponse.response,
     assert.fail,
   );
-
-  assert.deepEqual(result, {
-    statusCode: 200,
-    body: { status: "success", payload: updatedEvent },
-  });
-});
-
-test("deleteEvent deletes and returns the event", async () => {
-  const deletedEvent = { _id: "event-id", title: "Conference" };
-  const eventRepository = {
-    async deleteById(id) {
-      assert.equal(id, "event-id");
-      return deletedEvent;
-    },
-  };
-  const controller = createEventsController({ eventRepository });
-  const { response, result } = createResponse();
-
   await controller.deleteEvent(
     { params: { id: "event-id" } },
-    response,
+    deleteResponse.response,
     assert.fail,
   );
 
-  assert.deepEqual(result, {
-    statusCode: 200,
-    body: { status: "success", payload: deletedEvent },
-  });
+  assert.deepEqual(calls, [
+    ["updateEvent", "event-id", { title: "Updated" }],
+    ["deleteEvent", "event-id"],
+  ]);
+  assert.equal(updateResponse.result.statusCode, 200);
+  assert.equal(deleteResponse.result.statusCode, 200);
 });

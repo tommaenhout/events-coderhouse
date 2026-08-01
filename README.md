@@ -193,15 +193,21 @@ curl --request DELETE "$BASE_URL/events/$EVENT_ID"
 
 ```text
 Mongoose -> database
-Event model -> event repository -> events controller -> events router -> app
+Event model -> event DAO -> event repository -> events service
+             -> events controller -> events router -> app
 ```
 
 - `database` recibe el cliente de Mongoose y la configuración de conexión.
-- `eventRepository` recibe el modelo `Event`.
-- `eventsController` recibe el repositorio.
+- `eventDao` recibe el modelo `Event` y ejecuta las consultas de Mongoose.
+- `eventRepository` recibe el DAO y expone las operaciones de persistencia.
+- `eventService` recibe el repositorio y aplica validación y reglas de negocio.
+- `eventsController` recibe el servicio y traduce sus resultados a HTTP.
 - `eventsRouter` recibe el controlador.
-- `app` recibe los routers y el logger.
+- `errorHandler` centraliza los errores de Express y recibe el logger.
+- `app` recibe los routers y configura el middleware de errores.
 - `startApplication` recibe la aplicación, la base de datos y el puerto.
+- `pickFields` es una utilidad reutilizable para aceptar únicamente campos
+  permitidos en los datos de entrada.
 
 De esta manera, las pruebas pueden reemplazar MongoDB y cada capa por objetos
 falsos pequeños.
@@ -221,18 +227,31 @@ events-coderhouse/
 │   │   ├── events.controller.js
 │   │   ├── health.controller.js
 │   │   └── sessions.controller.js
+│   ├── dao/
+│   │   └── events.dao.js
+│   ├── middlewares/
+│   │   └── errorHandler.js
 │   ├── models/
 │   │   ├── Event.js
 │   │   └── User.js
 │   ├── repositories/
 │   │   └── events.repository.js
-│   └── routes/
-│       ├── events.router.js
-│       └── sessions.router.js
+│   ├── routes/
+│   │   ├── events.router.js
+│   │   └── sessions.router.js
+│   ├── services/
+│   │   └── events.service.js
+│   └── utils/
+│       └── pickFields.js
 ├── test/
 │   ├── database.test.js
+│   ├── errorHandler.test.js
 │   ├── events.controller.test.js
-│   └── events.repository.test.js
+│   ├── events.dao.test.js
+│   ├── events.repository.test.js
+│   ├── events.service.test.js
+│   ├── pickFields.test.js
+│   └── startApplication.test.js
 ├── .env.example
 ├── package.json
 └── README.md
@@ -244,9 +263,10 @@ events-coderhouse/
 npm test
 ```
 
-Las pruebas verifican la inyección del cliente de base de datos, el CRUD del
-repositorio, la validación y las respuestas del controlador. No leen `.env` ni
-se conectan a MongoDB Atlas.
+Las pruebas verifican la inyección del cliente de base de datos, las consultas
+del DAO, la delegación del repositorio, las reglas del servicio y las respuestas
+del controlador. También cubren el middleware de errores, las utilidades y el
+ciclo de vida de la aplicación. No leen `.env` ni se conectan a MongoDB Atlas.
 
 ## Trabajo futuro
 

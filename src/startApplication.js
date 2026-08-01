@@ -5,13 +5,19 @@ export const startApplication = async ({ app, database, port, logger = console }
     logger.log(`Servidor activo en http://localhost:${port}`);
   });
 
-  const stop = () =>
-    new Promise((resolve, reject) => {
-      server.close(async (serverError) => {
+  let stopPromise;
+
+  const stop = () => {
+    if (stopPromise) {
+      return stopPromise;
+    }
+
+    stopPromise = new Promise((resolve, reject) => {
+      const finishShutdown = async (serverError) => {
         try {
           await database.disconnect();
 
-          if (serverError) {
+          if (serverError && serverError.code !== "ERR_SERVER_NOT_RUNNING") {
             reject(serverError);
             return;
           }
@@ -20,8 +26,17 @@ export const startApplication = async ({ app, database, port, logger = console }
         } catch (databaseError) {
           reject(databaseError);
         }
-      });
+      };
+
+      if (server.listening) {
+        server.close(finishShutdown);
+      } else {
+        finishShutdown();
+      }
     });
+
+    return stopPromise;
+  };
 
   return { server, stop };
 };

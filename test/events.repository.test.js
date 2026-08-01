@@ -3,38 +3,31 @@ import test from "node:test";
 
 import { createEventRepository } from "../src/repositories/events.repository.js";
 
-const leanResult = (value, calls, method) => ({
-  lean() {
-    calls.push([`${method}.lean`]);
-    return value;
-  },
-});
-
-test("event repository delegates CRUD operations to the injected model", async () => {
+test("event repository delegates CRUD operations to the injected DAO", async () => {
   const calls = [];
-  const EventModel = {
-    find() {
-      calls.push(["find"]);
-      return leanResult(["all"], calls, "find");
+  const eventDao = {
+    async findAll() {
+      calls.push(["findAll"]);
+      return ["all"];
     },
-    findById(id) {
+    async findById(id) {
       calls.push(["findById", id]);
-      return leanResult({ id }, calls, "findById");
+      return { id };
     },
     async create(data) {
       calls.push(["create", data]);
-      return { toObject: () => ({ id: "created", ...data }) };
+      return { id: "created", ...data };
     },
-    findByIdAndUpdate(id, data, options) {
-      calls.push(["findByIdAndUpdate", id, data, options]);
-      return leanResult({ id, ...data }, calls, "findByIdAndUpdate");
+    async updateById(id, data) {
+      calls.push(["updateById", id, data]);
+      return { id, ...data };
     },
-    findByIdAndDelete(id) {
-      calls.push(["findByIdAndDelete", id]);
-      return leanResult({ id }, calls, "findByIdAndDelete");
+    async deleteById(id) {
+      calls.push(["deleteById", id]);
+      return { id };
     },
   };
-  const repository = createEventRepository({ EventModel });
+  const repository = createEventRepository({ eventDao });
 
   assert.deepEqual(await repository.findAll(), ["all"]);
   assert.deepEqual(await repository.findById("one"), { id: "one" });
@@ -49,19 +42,10 @@ test("event repository delegates CRUD operations to the injected model", async (
   assert.deepEqual(await repository.deleteById("one"), { id: "one" });
 
   assert.deepEqual(calls, [
-    ["find"],
-    ["find.lean"],
+    ["findAll"],
     ["findById", "one"],
-    ["findById.lean"],
     ["create", { title: "New" }],
-    [
-      "findByIdAndUpdate",
-      "one",
-      { title: "Updated" },
-      { new: true, runValidators: true },
-    ],
-    ["findByIdAndUpdate.lean"],
-    ["findByIdAndDelete", "one"],
-    ["findByIdAndDelete.lean"],
+    ["updateById", "one", { title: "Updated" }],
+    ["deleteById", "one"],
   ]);
 });
