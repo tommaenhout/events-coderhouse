@@ -24,5 +24,6 @@ export const env = Object.freeze({
   mongoUrl:
     process.env.MONGO_URL ||
     "mongodb://127.0.0.1:27017/events-coderhouse",
+  mongoDbName: process.env.MONGO_DB_NAME || "events",
   jwtSecret: process.env.JWT_SECRET || "development-only-secret",
 });
