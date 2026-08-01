@@ -1,55 +1,50 @@
 # Events Coderhouse API
 
-API REST inicial para una plataforma de gestión de eventos. El proyecto establece
-una arquitectura por capas que permitirá incorporar persistencia, autenticación y
-lógica de negocio en entregas posteriores.
+API REST para gestionar eventos. Usa Express, MongoDB y Mongoose, con una
+arquitectura por capas y dependencias inyectadas para mantener desacoplados el
+acceso a datos, los controladores y las rutas.
+
+## Funcionalidades
+
+- Conexión a MongoDB local o MongoDB Atlas.
+- CRUD completo de eventos.
+- Validación de los datos de entrada.
+- Respuestas `400`, `404` y `500` consistentes.
+- Cierre controlado del servidor y de la conexión a MongoDB.
+- Pruebas unitarias con dependencias falsas, sin requerir una base de datos.
 
 ## Tecnologías
 
-- Node.js
-- Express
+- Node.js 22+
+- Express 5
 - MongoDB Atlas
 - Mongoose
 - dotenv
-- ECMAScript Modules (ESM)
+- ECMAScript Modules
 - Node.js Test Runner
-
-## Requisitos previos
-
-- Node.js 22 o superior
-- npm
-- Git
-
-Se necesita una instancia de MongoDB local o un cluster de MongoDB Atlas.
 
 ## Instalación
 
-Luego de clonar el repositorio, ingresar al proyecto e instalar sus dependencias:
-
 ```bash
+git clone <URL_DEL_REPOSITORIO>
 cd events-coderhouse
 npm install
-```
-
-## Variables de entorno
-
-Crear el archivo local `.env` a partir del ejemplo:
-
-```bash
 cp .env.example .env
 ```
 
+## Configuración
+
 Variables disponibles:
 
-| Variable | Descripción | Valor de desarrollo |
+| Variable | Descripción | Valor predeterminado |
 | --- | --- | --- |
-| `PORT` | Puerto HTTP del servidor | `8080` |
+| `PORT` | Puerto HTTP de la aplicación | `8080` |
 | `NODE_ENV` | Entorno de ejecución | `development` |
-| `MONGO_URL` | URL de conexión a MongoDB | `mongodb://127.0.0.1:27017/events-coderhouse` |
-| `MONGO_DB_NAME` | Nombre de la base de datos | `events` |
-| `JWT_SECRET` | Secreto para firmar tokens en futuras entregas | `development-only-secret` |
+| `MONGO_URL` | URI de conexión a MongoDB | `mongodb://127.0.0.1:27017/events-coderhouse` |
+| `MONGO_DB_NAME` | Base de datos utilizada | `events` |
+| `JWT_SECRET` | Secreto reservado para autenticación futura | `development-only-secret` |
 
-Ejemplo de configuración:
+Ejemplo con MongoDB local:
 
 ```env
 PORT=8080
@@ -59,30 +54,157 @@ MONGO_DB_NAME=events
 JWT_SECRET=development-only-secret
 ```
 
-El archivo `.env` contiene configuración local y está excluido de Git. No se
-deben publicar credenciales ni secretos reales.
+Ejemplo con MongoDB Atlas:
+
+```env
+PORT=8080
+NODE_ENV=development
+MONGO_URL=mongodb+srv://USUARIO:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w=majority
+MONGO_DB_NAME=events
+JWT_SECRET=development-only-secret
+```
+
+En Atlas, el usuario debe tener permisos sobre la base de datos y la dirección
+IP del equipo debe estar habilitada en **Network Access**. Si la contraseña
+contiene caracteres especiales, deben codificarse para poder usarlos en una URL.
+
+El archivo `.env` está excluido de Git. No publiques credenciales reales ni las
+copies dentro de `.env.example`.
 
 ## Ejecución
 
-Iniciar el servidor:
+Modo normal:
 
 ```bash
 npm start
 ```
 
-Iniciar en modo desarrollo con reinicio automático:
+Modo desarrollo con reinicio automático:
 
 ```bash
 npm run dev
 ```
 
-Ejecutar las pruebas automatizadas:
+La API estará disponible en `http://localhost:8080`. El servidor HTTP se inicia
+solamente después de establecer la conexión con MongoDB.
 
-```bash
-npm test
+## Modelo de evento
+
+| Campo | Tipo | Obligatorio | Descripción |
+| --- | --- | --- | --- |
+| `title` | `String` | Sí | Nombre del evento |
+| `date` | `Date` | Sí | Fecha válida en formato ISO 8601 |
+| `description` | `String` | No | Descripción del evento |
+| `location` | `String` | No | Ubicación |
+| `organizer` | `String` | No | Organizador |
+
+Mongoose agrega automáticamente `createdAt` y `updatedAt`. Los campos que no
+pertenecen al modelo son descartados por el controlador.
+
+## Endpoints
+
+| Método | Ruta | Descripción | Respuestas |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | Comprueba el estado del servidor | `200` |
+| `GET` | `/api/events` | Lista todos los eventos | `200` |
+| `GET` | `/api/events/:id` | Obtiene un evento | `200`, `400`, `404` |
+| `POST` | `/api/events` | Crea un evento | `201`, `400` |
+| `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `404` |
+| `DELETE` | `/api/events/:id` | Elimina un evento | `200`, `400`, `404` |
+| `GET` | `/api/sessions` | Ruta inicial de sesiones | `200` |
+
+Todas las respuestas de eventos usan esta estructura:
+
+```json
+{
+  "status": "success",
+  "payload": {}
+}
 ```
 
-Por defecto, la API queda disponible en `http://localhost:8080`.
+Los errores usan `status: "error"` y un campo `message`.
+
+## Probar la API con curl
+
+Con el servidor ejecutándose, define la URL base:
+
+```bash
+BASE_URL="http://localhost:8080/api"
+```
+
+Comprobar el servidor:
+
+```bash
+curl "$BASE_URL/health"
+```
+
+Crear un evento:
+
+```bash
+curl --request POST "$BASE_URL/events" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "title": "Conferencia de JavaScript",
+    "description": "Encuentro para desarrolladores",
+    "date": "2026-09-01T18:00:00.000Z",
+    "location": "Buenos Aires",
+    "organizer": "Coderhouse"
+  }'
+```
+
+Copia el `_id` de la respuesta y guárdalo para las siguientes solicitudes:
+
+```bash
+EVENT_ID="REEMPLAZAR_CON_EL_ID"
+```
+
+Listar todos los eventos:
+
+```bash
+curl "$BASE_URL/events"
+```
+
+Obtener un evento:
+
+```bash
+curl "$BASE_URL/events/$EVENT_ID"
+```
+
+Actualizar campos del evento:
+
+```bash
+curl --request PUT "$BASE_URL/events/$EVENT_ID" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "title": "Conferencia de JavaScript actualizada",
+    "location": "Palermo, Buenos Aires"
+  }'
+```
+
+Eliminar el evento:
+
+```bash
+curl --request DELETE "$BASE_URL/events/$EVENT_ID"
+```
+
+## Arquitectura e inyección de dependencias
+
+`server.js` funciona como raíz de composición y conecta las capas:
+
+```text
+Mongoose -> database
+Event model -> event repository -> events controller -> events router -> app
+```
+
+- `database` recibe el cliente de Mongoose y la configuración de conexión.
+- `eventRepository` recibe el modelo `Event`.
+- `eventsController` recibe el repositorio.
+- `eventsRouter` recibe el controlador.
+- `app` recibe los routers y el logger.
+- `startApplication` recibe la aplicación, la base de datos y el puerto.
+
+De esta manera, las pruebas pueden reemplazar MongoDB y cada capa por objetos
+falsos pequeños.
 
 ## Estructura del proyecto
 
@@ -91,129 +213,44 @@ events-coderhouse/
 ├── src/
 │   ├── app.js
 │   ├── server.js
+│   ├── startApplication.js
 │   ├── config/
 │   │   ├── database.js
 │   │   └── env.js
-│   ├── routes/
-│   │   ├── events.router.js
-│   │   └── sessions.router.js
 │   ├── controllers/
-│   │   ├── health.controller.js
 │   │   ├── events.controller.js
+│   │   ├── health.controller.js
 │   │   └── sessions.controller.js
-│   ├── services/
+│   ├── models/
+│   │   ├── Event.js
+│   │   └── User.js
 │   ├── repositories/
 │   │   └── events.repository.js
-│   ├── dao/
-│   ├── models/
-│   │   ├── User.js
-│   │   └── Event.js
-│   ├── middlewares/
-│   └── utils/
+│   └── routes/
+│       ├── events.router.js
+│       └── sessions.router.js
+├── test/
+│   ├── database.test.js
+│   ├── events.controller.test.js
+│   └── events.repository.test.js
 ├── .env.example
-├── .gitignore
 ├── package.json
 └── README.md
 ```
 
-`server.js` es la raíz de composición: crea la conexión, el repositorio, el
-controlador y el router, e inyecta cada dependencia. `app.js` solamente configura
-Express con los routers recibidos. Esto permite probar cada capa con dependencias
-falsas, sin conectarse a MongoDB.
+## Pruebas
 
-## Rutas disponibles
-
-| Método | Ruta | Descripción | Estado |
-| --- | --- | --- | --- |
-| `GET` | `/api/health` | Comprueba que el servidor esté activo | `200` |
-| `GET` | `/api/events` | Lista todos los eventos | `200` |
-| `GET` | `/api/events/:id` | Obtiene un evento por ID | `200`, `404` |
-| `POST` | `/api/events` | Crea un evento | `201`, `400` |
-| `PUT` | `/api/events/:id` | Actualiza campos de un evento | `200`, `400`, `404` |
-| `DELETE` | `/api/events/:id` | Elimina un evento | `200`, `404` |
-| `GET` | `/api/sessions` | Devuelve la colección inicial de sesiones | `200` |
-
-### Health
-
-Solicitud:
-
-```http
-GET /api/health
+```bash
+npm test
 ```
 
-Respuesta:
+Las pruebas verifican la inyección del cliente de base de datos, el CRUD del
+repositorio, la validación y las respuestas del controlador. No leen `.env` ni
+se conectan a MongoDB Atlas.
 
-```json
-{
-  "status": "ok",
-  "message": "Servidor activo"
-}
-```
+## Trabajo futuro
 
-### Events
-
-Crear un evento:
-
-```http
-POST /api/events
-Content-Type: application/json
-
-{
-  "title": "Conferencia de JavaScript",
-  "description": "Encuentro para desarrolladores",
-  "date": "2026-09-01T18:00:00.000Z",
-  "location": "Buenos Aires",
-  "organizer": "Coderhouse"
-}
-```
-
-`title` y `date` son obligatorios. Los campos admitidos son `title`,
-`description`, `date`, `location` y `organizer`.
-
-Listar eventos:
-
-```http
-GET /api/events
-```
-
-Respuesta:
-
-```json
-{
-  "status": "success",
-  "payload": []
-}
-```
-
-Consultar, actualizar o eliminar un evento utilizando su `_id`:
-
-```http
-GET /api/events/64f1a2b3c4d5e6f789012345
-PUT /api/events/64f1a2b3c4d5e6f789012345
-DELETE /api/events/64f1a2b3c4d5e6f789012345
-```
-
-### Sessions
-
-Solicitud:
-
-```http
-GET /api/sessions
-```
-
-Respuesta:
-
-```json
-{
-  "status": "success",
-  "payload": []
-}
-```
-
-## Alcance de la primera entrega
-
-La aplicación se conecta a MongoDB antes de abrir el servidor HTTP. El recurso
-`events` implementa persistencia CRUD sobre la colección homónima; `sessions`
-continúa como estructura inicial para una entrega posterior.
-
-Todavía no se incluyen autenticación, autorización ni emisión de JWT.
+- Autenticación y emisión de JWT.
+- Autorización por roles.
+- CRUD de usuarios y sesiones.
+- Paginación y filtros para eventos.
