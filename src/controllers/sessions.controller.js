@@ -1,3 +1,4 @@
+import { SessionValidationError } from "../errors/sessions.errors.js";
 import { UserEmailConflictError } from "../errors/users.errors.js";
 import sessionsService from "../services/sessions.service.js";
 
@@ -13,7 +14,7 @@ export const register = async (request, response, next) => {
       });
     }
 
-    if (error instanceof Error) {
+    if (error instanceof SessionValidationError) {
       return response.status(400).json({ status: "error", message: error.message });
     }
 

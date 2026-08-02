@@ -10,6 +10,7 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 - CRUD completo de usuarios, separado del módulo de sesiones.
 - Registro inicial de usuarios con contraseñas protegidas por bcrypt.
 - Validación de los datos de entrada.
+- Mensajes de respuesta y errores dirigidos al cliente en español.
 - Respuestas `400`, `404` y `500` consistentes.
 - Cierre controlado del servidor y de la conexión a MongoDB.
 - Pruebas unitarias con dependencias falsas, sin requerir una base de datos.
@@ -303,9 +304,11 @@ events-coderhouse/
 │   │   ├── events.dao.js
 │   │   └── users.dao.js
 │   ├── errors/
+│   │   ├── sessions.errors.js
 │   │   └── users.errors.js
 │   ├── middlewares/
-│   │   └── errorHandler.js
+│   │   ├── errorHandler.js
+│   │   └── notFoundHandler.js
 │   ├── models/
 │   │   ├── event.model.js
 │   │   └── user.model.js
@@ -330,6 +333,7 @@ events-coderhouse/
 │   ├── events.dao.test.js
 │   ├── events.repository.test.js
 │   ├── events.service.test.js
+│   ├── notFoundHandler.test.js
 │   ├── pickFields.test.js
 │   ├── sessions.controller.test.js
 │   ├── sessions.service.test.js

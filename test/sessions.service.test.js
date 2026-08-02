@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { SessionValidationError } from "../src/errors/sessions.errors.js";
 import { UserEmailConflictError } from "../src/errors/users.errors.js";
 import usersRepository from "../src/repositories/users.repository.js";
 import sessionsService from "../src/services/sessions.service.js";
@@ -47,5 +48,27 @@ test("sessions service uses a typed duplicate-email error", async (context) => {
       password: "password123",
     }),
     UserEmailConflictError,
+  );
+});
+
+test("sessions service validation messages are in Spanish", async () => {
+  await assert.rejects(
+    sessionsService.register({}),
+    (error) =>
+      error instanceof SessionValidationError &&
+      error.message ===
+        "Los campos first_name, last_name, email y password son obligatorios",
+  );
+
+  await assert.rejects(
+    sessionsService.register({
+      first_name: "Tom",
+      last_name: "Tester",
+      email: "email-invalido",
+      password: "password123",
+    }),
+    (error) =>
+      error instanceof SessionValidationError &&
+      error.message === "El formato del email no es válido",
   );
 });

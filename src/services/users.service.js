@@ -48,13 +48,13 @@ const validateUserData = (body, { creating = false } = {}) => {
   if (Object.hasOwn(data, "password")) {
     if (typeof data.password !== "string" || data.password.length < minimumPasswordLength) {
       throw new UserValidationError(
-        `El password debe tener al menos ${minimumPasswordLength} caracteres`,
+        `La contraseña debe tener al menos ${minimumPasswordLength} caracteres`,
       );
     }
   }
 
   if (Object.hasOwn(data, "role") && !allowedRoles.has(data.role)) {
-    throw new UserValidationError("El role debe ser user, organizer o admin");
+    throw new UserValidationError("El rol debe ser user, organizer o admin");
   }
 
   return data;

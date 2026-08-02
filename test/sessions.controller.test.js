@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { register } from "../src/controllers/sessions.controller.js";
+import { SessionValidationError } from "../src/errors/sessions.errors.js";
 import { UserEmailConflictError } from "../src/errors/users.errors.js";
 import sessionsService from "../src/services/sessions.service.js";
 
@@ -48,4 +49,22 @@ test("register controller maps duplicate email to 409", async (context) => {
   await register({ body: {} }, response, assert.fail);
 
   assert.equal(result.statusCode, 409);
+});
+
+test("register controller returns validation feedback in Spanish", async (context) => {
+  const original = sessionsService.register;
+  sessionsService.register = async () => {
+    throw new SessionValidationError("Faltan datos obligatorios");
+  };
+  context.after(() => {
+    sessionsService.register = original;
+  });
+  const { response, result } = createResponse();
+
+  await register({ body: {} }, response, assert.fail);
+
+  assert.deepEqual(result, {
+    statusCode: 400,
+    body: { status: "error", message: "Faltan datos obligatorios" },
+  });
 });
