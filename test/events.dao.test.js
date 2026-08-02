@@ -1,67 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createEventDao } from "../src/dao/events.dao.js";
+import eventsDao from "../src/dao/events.dao.js";
+import { Event } from "../src/models/event.model.js";
 
-const leanResult = (value, calls, method) => ({
-  lean() {
-    calls.push([`${method}.lean`]);
-    return value;
-  },
-});
+const stubModel = (context, stubs) => {
+  const originals = {};
+  for (const [method, implementation] of Object.entries(stubs)) {
+    originals[method] = Event[method];
+    Event[method] = implementation;
+  }
+  context.after(() => Object.assign(Event, originals));
+};
 
-test("event DAO delegates CRUD operations to the injected Mongoose model", async () => {
+test("events DAO executes Mongoose CRUD operations", async (context) => {
   const calls = [];
-  const EventModel = {
-    find() {
-      calls.push(["find"]);
-      return leanResult(["all"], calls, "find");
+  const lean = (value) => ({ lean: () => value });
+  stubModel(context, {
+    find: () => lean(["all"]),
+    findById: (id) => lean({ id }),
+    create: async (data) => ({ toObject: () => ({ id: "new", ...data }) }),
+    findByIdAndUpdate: (id, data, options) => {
+      calls.push([id, data, options]);
+      return lean({ id, ...data });
     },
-    findById(id) {
-      calls.push(["findById", id]);
-      return leanResult({ id }, calls, "findById");
-    },
-    async create(data) {
-      calls.push(["create", data]);
-      return { toObject: () => ({ id: "created", ...data }) };
-    },
-    findByIdAndUpdate(id, data, options) {
-      calls.push(["findByIdAndUpdate", id, data, options]);
-      return leanResult({ id, ...data }, calls, "findByIdAndUpdate");
-    },
-    findByIdAndDelete(id) {
-      calls.push(["findByIdAndDelete", id]);
-      return leanResult({ id }, calls, "findByIdAndDelete");
-    },
-  };
-  const eventDao = createEventDao({ EventModel });
+    findByIdAndDelete: (id) => lean({ id }),
+  });
 
-  assert.deepEqual(await eventDao.findAll(), ["all"]);
-  assert.deepEqual(await eventDao.findById("one"), { id: "one" });
-  assert.deepEqual(await eventDao.create({ title: "New" }), {
-    id: "created",
+  assert.deepEqual(await eventsDao.findAll(), ["all"]);
+  assert.deepEqual(await eventsDao.findById("one"), { id: "one" });
+  assert.deepEqual(await eventsDao.create({ title: "New" }), {
+    id: "new",
     title: "New",
   });
-  assert.deepEqual(await eventDao.updateById("one", { title: "Updated" }), {
+  assert.deepEqual(await eventsDao.updateById("one", { title: "Updated" }), {
     id: "one",
     title: "Updated",
   });
-  assert.deepEqual(await eventDao.deleteById("one"), { id: "one" });
-
+  assert.deepEqual(await eventsDao.deleteById("one"), { id: "one" });
   assert.deepEqual(calls, [
-    ["find"],
-    ["find.lean"],
-    ["findById", "one"],
-    ["findById.lean"],
-    ["create", { title: "New" }],
-    [
-      "findByIdAndUpdate",
-      "one",
-      { title: "Updated" },
-      { new: true, runValidators: true },
-    ],
-    ["findByIdAndUpdate.lean"],
-    ["findByIdAndDelete", "one"],
-    ["findByIdAndDelete.lean"],
+    ["one", { title: "Updated" }, { new: true, runValidators: true }],
   ]);
 });

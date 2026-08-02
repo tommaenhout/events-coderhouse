@@ -1,13 +1,22 @@
-export const createSessionsController = ({ sessionsService }) => ({
-  async getSessions(_request, response, next) {
-    try {
-      const sessions = await sessionsService.getSessions();
-      return response.status(200).json({
-        status: "success",
-        payload: sessions,
+import { UserEmailConflictError } from "../errors/users.errors.js";
+import sessionsService from "../services/sessions.service.js";
+
+export const register = async (request, response, next) => {
+  try {
+    const result = await sessionsService.register(request.body);
+    return response.status(201).json({ status: "success", payload: result });
+  } catch (error) {
+    if (error instanceof UserEmailConflictError) {
+      return response.status(409).json({
+        status: "error",
+        message: error.message,
       });
-    } catch (error) {
-      return next(error);
     }
-  },
-});
+
+    if (error instanceof Error) {
+      return response.status(400).json({ status: "error", message: error.message });
+    }
+
+    return next(error);
+  }
+};

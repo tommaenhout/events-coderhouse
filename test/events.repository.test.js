@@ -1,46 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createEventRepository } from "../src/repositories/events.repository.js";
+import eventsDao from "../src/dao/events.dao.js";
+import eventsRepository from "../src/repositories/events.repository.js";
 
-test("event repository delegates CRUD operations to the injected DAO", async () => {
+test("events repository delegates CRUD operations to the DAO", async (context) => {
   const calls = [];
-  const eventDao = {
-    async findAll() {
-      calls.push(["findAll"]);
-      return ["all"];
-    },
-    async findById(id) {
-      calls.push(["findById", id]);
-      return { id };
-    },
-    async create(data) {
-      calls.push(["create", data]);
-      return { id: "created", ...data };
-    },
-    async updateById(id, data) {
-      calls.push(["updateById", id, data]);
-      return { id, ...data };
-    },
-    async deleteById(id) {
-      calls.push(["deleteById", id]);
-      return { id };
-    },
-  };
-  const repository = createEventRepository({ eventDao });
+  const originals = {};
+  for (const method of ["findAll", "findById", "create", "updateById", "deleteById"]) {
+    originals[method] = eventsDao[method];
+    eventsDao[method] = async (...args) => {
+      calls.push([method, ...args]);
+      return method;
+    };
+  }
+  context.after(() => Object.assign(eventsDao, originals));
 
-  assert.deepEqual(await repository.findAll(), ["all"]);
-  assert.deepEqual(await repository.findById("one"), { id: "one" });
-  assert.deepEqual(await repository.create({ title: "New" }), {
-    id: "created",
-    title: "New",
-  });
-  assert.deepEqual(await repository.updateById("one", { title: "Updated" }), {
-    id: "one",
-    title: "Updated",
-  });
-  assert.deepEqual(await repository.deleteById("one"), { id: "one" });
-
+  assert.equal(await eventsRepository.findAll(), "findAll");
+  assert.equal(await eventsRepository.findById("one"), "findById");
+  assert.equal(await eventsRepository.create({ title: "New" }), "create");
+  assert.equal(
+    await eventsRepository.updateById("one", { title: "Updated" }),
+    "updateById",
+  );
+  assert.equal(await eventsRepository.deleteById("one"), "deleteById");
   assert.deepEqual(calls, [
     ["findAll"],
     ["findById", "one"],

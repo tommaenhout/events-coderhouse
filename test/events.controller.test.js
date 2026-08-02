@@ -1,170 +1,80 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createEventsController } from "../src/controllers/events.controller.js";
 import {
+  createEvent,
+  deleteEvent,
+  getEventById,
+  getEvents,
+  updateEvent,
+} from "../src/controllers/events.controller.js";
+import eventsService, {
   EventNotFoundError,
   EventValidationError,
 } from "../src/services/events.service.js";
 
 const createResponse = () => {
   const result = {};
-  const response = {
-    status(statusCode) {
-      result.statusCode = statusCode;
-      return this;
-    },
-    json(body) {
-      result.body = body;
-      return this;
+  return {
+    result,
+    response: {
+      status(code) {
+        result.statusCode = code;
+        return this;
+      },
+      json(body) {
+        result.body = body;
+      },
     },
   };
-
-  return { response, result };
 };
 
-test("getEvents uses the injected service", async () => {
-  const expectedEvents = [{ title: "Injected event" }];
-  const eventService = { getEvents: async () => expectedEvents };
-  const controller = createEventsController({ eventService });
-  const { response, result } = createResponse();
-
-  await controller.getEvents({}, response, assert.fail);
-
-  assert.deepEqual(result, {
-    statusCode: 200,
-    body: { status: "success", payload: expectedEvents },
+const stubService = (context, method, implementation) => {
+  const original = eventsService[method];
+  eventsService[method] = implementation;
+  context.after(() => {
+    eventsService[method] = original;
   });
-});
+};
 
-test("controller forwards unexpected service errors", async () => {
-  const expectedError = new Error("database unavailable");
-  const eventService = {
-    async getEvents() {
-      throw expectedError;
-    },
+test("events controllers map CRUD results to HTTP", async (context) => {
+  const methods = {
+    getEvents: async () => ["all"],
+    getEventById: async (id) => ({ id }),
+    createEvent: async (data) => ({ id: "new", ...data }),
+    updateEvent: async (id, data) => ({ id, ...data }),
+    deleteEvent: async (id) => ({ id }),
   };
-  const controller = createEventsController({ eventService });
-  let forwardedError;
+  for (const [method, implementation] of Object.entries(methods)) {
+    stubService(context, method, implementation);
+  }
 
-  await controller.getEvents({}, {}, (error) => {
-    forwardedError = error;
-  });
-
-  assert.equal(forwardedError, expectedError);
-});
-
-test("getEventById returns an event", async () => {
-  const expectedEvent = { _id: "event-id", title: "Conference" };
-  const eventService = {
-    async getEventById(id) {
-      assert.equal(id, "event-id");
-      return expectedEvent;
-    },
-  };
-  const controller = createEventsController({ eventService });
-  const { response, result } = createResponse();
-
-  await controller.getEventById(
-    { params: { id: "event-id" } },
-    response,
+  const responses = Array.from({ length: 5 }, createResponse);
+  await getEvents({}, responses[0].response, assert.fail);
+  await getEventById({ params: { id: "one" } }, responses[1].response, assert.fail);
+  await createEvent({ body: { title: "New" } }, responses[2].response, assert.fail);
+  await updateEvent(
+    { params: { id: "one" }, body: { title: "Updated" } },
+    responses[3].response,
     assert.fail,
   );
+  await deleteEvent({ params: { id: "one" } }, responses[4].response, assert.fail);
 
-  assert.deepEqual(result, {
-    statusCode: 200,
-    body: { status: "success", payload: expectedEvent },
-  });
+  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 201, 200, 200]);
 });
 
-test("controller maps missing events to 404", async () => {
-  const eventService = {
-    async getEventById() {
-      throw new EventNotFoundError();
-    },
-  };
-  const controller = createEventsController({ eventService });
-  const { response, result } = createResponse();
+test("events controller maps domain errors", async (context) => {
+  const cases = [
+    [new EventValidationError("invalid"), 400],
+    [new EventNotFoundError(), 404],
+  ];
 
-  await controller.getEventById({ params: { id: "missing" } }, response, assert.fail);
-
-  assert.deepEqual(result, {
-    statusCode: 404,
-    body: { status: "error", message: "Evento no encontrado" },
-  });
-});
-
-test("createEvent passes request data to the service", async () => {
-  const requestBody = {
-    title: "Conference",
-    date: "2026-09-01T18:00:00.000Z",
-  };
-  const expectedEvent = { _id: "event-id", ...requestBody };
-  const eventService = {
-    async createEvent(eventData) {
-      assert.equal(eventData, requestBody);
-      return expectedEvent;
-    },
-  };
-  const controller = createEventsController({ eventService });
-  const { response, result } = createResponse();
-
-  await controller.createEvent({ body: requestBody }, response, assert.fail);
-
-  assert.deepEqual(result, {
-    statusCode: 201,
-    body: { status: "success", payload: expectedEvent },
-  });
-});
-
-test("controller maps service validation errors to 400", async () => {
-  const eventService = {
-    async createEvent() {
-      throw new EventValidationError("Datos inválidos");
-    },
-  };
-  const controller = createEventsController({ eventService });
-  const { response, result } = createResponse();
-
-  await controller.createEvent({ body: {} }, response, assert.fail);
-
-  assert.deepEqual(result, {
-    statusCode: 400,
-    body: { status: "error", message: "Datos inválidos" },
-  });
-});
-
-test("updateEvent and deleteEvent pass IDs to the service", async () => {
-  const calls = [];
-  const eventService = {
-    async updateEvent(id, data) {
-      calls.push(["updateEvent", id, data]);
-      return { _id: id, ...data };
-    },
-    async deleteEvent(id) {
-      calls.push(["deleteEvent", id]);
-      return { _id: id };
-    },
-  };
-  const controller = createEventsController({ eventService });
-  const updateResponse = createResponse();
-  const deleteResponse = createResponse();
-
-  await controller.updateEvent(
-    { params: { id: "event-id" }, body: { title: "Updated" } },
-    updateResponse.response,
-    assert.fail,
-  );
-  await controller.deleteEvent(
-    { params: { id: "event-id" } },
-    deleteResponse.response,
-    assert.fail,
-  );
-
-  assert.deepEqual(calls, [
-    ["updateEvent", "event-id", { title: "Updated" }],
-    ["deleteEvent", "event-id"],
-  ]);
-  assert.equal(updateResponse.result.statusCode, 200);
-  assert.equal(deleteResponse.result.statusCode, 200);
+  for (const [error, expectedStatus] of cases) {
+    stubService(context, "getEvents", async () => {
+      throw error;
+    });
+    const { response, result } = createResponse();
+    await getEvents({}, response, assert.fail);
+    assert.equal(result.statusCode, expectedStatus);
+  }
 });

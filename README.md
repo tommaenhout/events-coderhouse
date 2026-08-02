@@ -1,14 +1,14 @@
 # Events Coderhouse API
 
-API REST para gestionar eventos. Usa Express, MongoDB y Mongoose, con una
-arquitectura por capas y dependencias inyectadas para mantener desacoplados el
-acceso a datos, los controladores y las rutas.
+API REST para gestionar eventos y usuarios. Usa Express, MongoDB y Mongoose con
+una arquitectura por capas basada en importaciones directas entre módulos.
 
 ## Funcionalidades
 
 - Conexión a MongoDB local o MongoDB Atlas.
 - CRUD completo de eventos.
 - CRUD completo de usuarios, separado del módulo de sesiones.
+- Registro inicial de usuarios con contraseñas protegidas por bcrypt.
 - Validación de los datos de entrada.
 - Respuestas `400`, `404` y `500` consistentes.
 - Cierre controlado del servidor y de la conexión a MongoDB.
@@ -20,6 +20,7 @@ acceso a datos, los controladores y las rutas.
 - Express 5
 - MongoDB Atlas
 - Mongoose
+- bcrypt
 - dotenv
 - ECMAScript Modules
 - Node.js Test Runner
@@ -106,12 +107,13 @@ pertenecen al modelo son descartados por el servicio.
 
 | Campo | Tipo | Obligatorio | Descripción |
 | --- | --- | --- | --- |
-| `name` | `String` | Sí | Nombre del usuario |
+| `first_name` | `String` | Sí | Nombre del usuario |
+| `last_name` | `String` | Sí | Apellido del usuario |
 | `email` | `String` | Sí | Email único, normalizado a minúsculas |
-| `role` | `String` | No | `user` o `admin`; usa `user` por defecto |
+| `password` | `String` | Sí | Contraseña almacenada como hash de bcrypt |
+| `role` | `String` | No | `user`, `organizer` o `admin` |
 
-El modelo no contiene contraseñas porque la autenticación todavía está fuera del
-alcance del proyecto.
+Las respuestas públicas nunca incluyen `password`.
 
 ## Endpoints
 
@@ -128,7 +130,7 @@ alcance del proyecto.
 | `POST` | `/api/users` | Crea un usuario | `201`, `400`, `409` |
 | `PUT` | `/api/users/:id` | Actualiza uno o más campos | `200`, `400`, `404`, `409` |
 | `DELETE` | `/api/users/:id` | Elimina un usuario | `200`, `400`, `404` |
-| `GET` | `/api/sessions` | Ruta inicial de sesiones | `200` |
+| `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
 
 Todas las respuestas de eventos y usuarios usan esta estructura:
 
@@ -141,25 +143,16 @@ Todas las respuestas de eventos y usuarios usan esta estructura:
 
 Los errores usan `status: "error"` y un campo `message`.
 
-### Estructura inicial de sesiones
+### Registro inicial de sesiones
 
-`GET /api/sessions` conserva una respuesta vacía y pasa por una estructura
-inyectable de router, controlador y servicio:
+El módulo de sesiones implementa únicamente el registro inicial:
 
 ```text
 sessions router -> sessions controller -> sessions service
 ```
 
-```json
-{
-  "status": "success",
-  "payload": []
-}
-```
-
-Esta estructura no implementa registro, login, contraseñas, JWT, persistencia de
-sesiones, autenticación ni autorización. Es solamente el punto de extensión para
-una entrega futura.
+La contraseña se valida, se transforma con bcrypt y nunca se devuelve. Todavía
+no se implementan login, JWT, persistencia de sesiones ni autorización.
 
 ## Probar la API con curl
 
@@ -230,8 +223,10 @@ Crear un usuario:
 curl --request POST "$BASE_URL/users" \
   --header "Content-Type: application/json" \
   --data '{
-    "name": "Tom",
+    "first_name": "Tom",
+    "last_name": "Tester",
     "email": "tom@example.com",
+    "password": "password123",
     "role": "user"
   }'
 ```
@@ -244,13 +239,26 @@ curl "$BASE_URL/users"
 curl "$BASE_URL/users/$USER_ID"
 curl --request PUT "$BASE_URL/users/$USER_ID" \
   --header "Content-Type: application/json" \
-  --data '{"name":"Tom actualizado"}'
+  --data '{"first_name":"Tom actualizado"}'
 curl --request DELETE "$BASE_URL/users/$USER_ID"
 ```
 
-## Arquitectura e inyección de dependencias
+Registrar un usuario mediante sesiones:
 
-`server.js` funciona como raíz de composición y conecta las capas:
+```bash
+curl --request POST "$BASE_URL/sessions/register" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "first_name": "Tom",
+    "last_name": "Tester",
+    "email": "tom@example.com",
+    "password": "password123"
+  }'
+```
+
+## Arquitectura por capas
+
+Cada módulo importa directamente la siguiente capa:
 
 ```text
 Mongoose -> database
@@ -260,24 +268,20 @@ User model  -> user DAO  -> user repository  -> users service
              -> users controller  -> users router  -> app
 ```
 
-- `database` recibe el cliente de Mongoose y la configuración de conexión.
-- `eventDao` recibe el modelo `Event` y ejecuta las consultas de Mongoose.
-- `eventRepository` recibe el DAO y expone las operaciones de persistencia.
-- `eventService` recibe el repositorio y aplica validación y reglas de negocio.
-- `eventsController` recibe el servicio y traduce sus resultados a HTTP.
-- `eventsRouter` recibe el controlador.
-- El módulo de usuarios replica las mismas capas para mantener su persistencia y
-  sus reglas independientes de eventos y sesiones.
-- El módulo inicial de sesiones inyecta `sessionsService` en
-  `sessionsController` y este último en `sessionsRouter`.
+- Los routers importan sus controladores.
+- Los controladores importan sus servicios.
+- Los servicios importan sus repositorios.
+- Los repositorios importan sus DAO.
+- Los DAO importan los modelos de Mongoose.
+- El módulo de sesiones reutiliza el repositorio de usuarios.
 - `errorHandler` centraliza los errores de Express y recibe el logger.
-- `app` recibe los routers y configura el middleware de errores.
-- `startApplication` recibe la aplicación, la base de datos y el puerto.
+- `app` importa los routers y configura Express.
+- `server.js` conecta MongoDB e inicia la aplicación.
 - `pickFields` es una utilidad reutilizable para aceptar únicamente campos
   permitidos en los datos de entrada.
 
-De esta manera, las pruebas pueden reemplazar MongoDB y cada capa por objetos
-falsos pequeños.
+Las capas mantienen separadas las reglas de negocio y las consultas aunque sus
+dependencias se resuelven mediante importaciones directas.
 
 ## Estructura del proyecto
 
@@ -303,8 +307,8 @@ events-coderhouse/
 │   ├── middlewares/
 │   │   └── errorHandler.js
 │   ├── models/
-│   │   ├── Event.js
-│   │   └── User.js
+│   │   ├── event.model.js
+│   │   └── user.model.js
 │   ├── repositories/
 │   │   ├── events.repository.js
 │   │   └── users.repository.js
@@ -317,6 +321,7 @@ events-coderhouse/
 │   │   ├── sessions.service.js
 │   │   └── users.service.js
 │   └── utils/
+│       ├── hash.js
 │       └── pickFields.js
 ├── test/
 │   ├── database.test.js
@@ -344,10 +349,10 @@ events-coderhouse/
 npm test
 ```
 
-Las pruebas verifican la inyección del cliente de base de datos, las consultas
-del DAO, la delegación del repositorio, las reglas del servicio y las respuestas
-del controlador. También cubren el middleware de errores, las utilidades y el
-ciclo de vida de la aplicación. No leen `.env` ni se conectan a MongoDB Atlas.
+Las pruebas verifican las consultas del DAO, la delegación del repositorio, las
+reglas del servicio y las respuestas del controlador. También cubren el registro,
+el middleware de errores, las utilidades y el ciclo de vida de la aplicación. No
+leen `.env` ni se conectan a MongoDB Atlas.
 
 ## Trabajo futuro
 

@@ -1,20 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createUsersController } from "../src/controllers/users.controller.js";
+import {
+  createUser,
+  deleteUser,
+  getUserById,
+  getUsers,
+  updateUser,
+} from "../src/controllers/users.controller.js";
 import {
   UserEmailConflictError,
   UserNotFoundError,
   UserValidationError,
 } from "../src/errors/users.errors.js";
+import usersService from "../src/services/users.service.js";
 
 const createResponse = () => {
   const result = {};
   return {
     result,
     response: {
-      status(statusCode) {
-        result.statusCode = statusCode;
+      status(code) {
+        result.statusCode = code;
         return this;
       },
       json(body) {
@@ -24,72 +31,48 @@ const createResponse = () => {
   };
 };
 
-test("users controller maps CRUD operations to HTTP responses", async () => {
-  const calls = [];
-  const usersService = {
+const stubService = (context, method, implementation) => {
+  const original = usersService[method];
+  usersService[method] = implementation;
+  context.after(() => {
+    usersService[method] = original;
+  });
+};
+
+test("users controllers map CRUD results to HTTP", async (context) => {
+  const methods = {
     getUsers: async () => ["all"],
-    getUserById: async (id) => ({ _id: id }),
-    createUser: async (data) => ({ _id: "created", ...data }),
-    updateUser: async (id, data) => ({ _id: id, ...data }),
-    deleteUser: async (id) => {
-      calls.push(["deleteUser", id]);
-      return { _id: id };
-    },
+    getUserById: async (id) => ({ id }),
+    createUser: async (data) => ({ id: "new", ...data }),
+    updateUser: async (id, data) => ({ id, ...data }),
+    deleteUser: async (id) => ({ id }),
   };
-  const controller = createUsersController({ usersService });
-  const listResult = createResponse();
-  const getResult = createResponse();
-  const createResult = createResponse();
-  const updateResult = createResponse();
-  const deleteResult = createResponse();
+  for (const [method, implementation] of Object.entries(methods)) {
+    stubService(context, method, implementation);
+  }
 
-  await controller.getUsers({}, listResult.response, assert.fail);
-  await controller.getUserById(
-    { params: { id: "one" } },
-    getResult.response,
-    assert.fail,
-  );
-  await controller.createUser(
-    { body: { name: "Tom" } },
-    createResult.response,
-    assert.fail,
-  );
-  await controller.updateUser(
-    { params: { id: "one" }, body: { name: "Daniel" } },
-    updateResult.response,
-    assert.fail,
-  );
-  await controller.deleteUser(
-    { params: { id: "one" } },
-    deleteResult.response,
-    assert.fail,
-  );
+  const responses = Array.from({ length: 5 }, createResponse);
+  await getUsers({}, responses[0].response, assert.fail);
+  await getUserById({ params: { id: "one" } }, responses[1].response, assert.fail);
+  await createUser({ body: {} }, responses[2].response, assert.fail);
+  await updateUser({ params: { id: "one" }, body: {} }, responses[3].response, assert.fail);
+  await deleteUser({ params: { id: "one" } }, responses[4].response, assert.fail);
 
-  assert.equal(listResult.result.statusCode, 200);
-  assert.equal(getResult.result.statusCode, 200);
-  assert.equal(createResult.result.statusCode, 201);
-  assert.equal(updateResult.result.statusCode, 200);
-  assert.equal(deleteResult.result.statusCode, 200);
-  assert.deepEqual(calls, [["deleteUser", "one"]]);
+  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 201, 200, 200]);
 });
 
-test("users controller maps domain errors to HTTP status codes", async () => {
+test("users controller maps domain errors", async (context) => {
   const cases = [
     [new UserValidationError("invalid"), 400],
     [new UserNotFoundError(), 404],
     [new UserEmailConflictError(), 409],
   ];
-
   for (const [error, expectedStatus] of cases) {
-    const usersService = {
-      async getUsers() {
-        throw error;
-      },
-    };
-    const controller = createUsersController({ usersService });
+    stubService(context, "getUsers", async () => {
+      throw error;
+    });
     const { response, result } = createResponse();
-
-    await controller.getUsers({}, response, assert.fail);
+    await getUsers({}, response, assert.fail);
     assert.equal(result.statusCode, expectedStatus);
   }
 });

@@ -1,25 +1,29 @@
-export const createEventDao = ({ EventModel }) => ({
+import { Event } from "../models/event.model.js";
+
+class EventsDao {
   findAll() {
-    return EventModel.find().lean();
-  },
+    return Event.find().lean();
+  }
 
   findById(id) {
-    return EventModel.findById(id).lean();
-  },
+    return Event.findById(id).lean();
+  }
 
   async create(eventData) {
-    const event = await EventModel.create(eventData);
+    const event = await Event.create(eventData);
     return event.toObject();
-  },
+  }
 
   updateById(id, eventData) {
-    return EventModel.findByIdAndUpdate(id, eventData, {
+    return Event.findByIdAndUpdate(id, eventData, {
       new: true,
       runValidators: true,
     }).lean();
-  },
+  }
 
   deleteById(id) {
-    return EventModel.findByIdAndDelete(id).lean();
-  },
-});
+    return Event.findByIdAndDelete(id).lean();
+  }
+}
+
+export default new EventsDao();

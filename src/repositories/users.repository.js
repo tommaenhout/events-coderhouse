@@ -1,25 +1,29 @@
-export const createUserRepository = ({ userDao }) => ({
+import usersDao from "../dao/users.dao.js";
+
+class UsersRepository {
   findAll() {
-    return userDao.findAll();
-  },
+    return usersDao.findAll();
+  }
 
   findById(id) {
-    return userDao.findById(id);
-  },
+    return usersDao.findById(id);
+  }
 
   findByEmail(email) {
-    return userDao.findByEmail(email);
-  },
+    return usersDao.findByEmail(email);
+  }
 
   create(userData) {
-    return userDao.create(userData);
-  },
+    return usersDao.create(userData);
+  }
 
   updateById(id, userData) {
-    return userDao.updateById(id, userData);
-  },
+    return usersDao.updateById(id, userData);
+  }
 
   deleteById(id) {
-    return userDao.deleteById(id);
-  },
-});
+    return usersDao.deleteById(id);
+  }
+}
+
+export default new UsersRepository();

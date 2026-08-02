@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createSessionsController } from "../src/controllers/sessions.controller.js";
+import { register } from "../src/controllers/sessions.controller.js";
+import { UserEmailConflictError } from "../src/errors/users.errors.js";
+import sessionsService from "../src/services/sessions.service.js";
 
 const createResponse = () => {
   const result = {};
   return {
     result,
     response: {
-      status(statusCode) {
-        result.statusCode = statusCode;
+      status(code) {
+        result.statusCode = code;
         return this;
       },
       json(body) {
@@ -19,33 +21,31 @@ const createResponse = () => {
   };
 };
 
-test("sessions controller uses the injected service", async () => {
-  const sessions = [{ id: "placeholder" }];
-  const sessionsService = { getSessions: async () => sessions };
-  const controller = createSessionsController({ sessionsService });
+test("register controller returns a created user", async (context) => {
+  const original = sessionsService.register;
+  sessionsService.register = async () => ({ _id: "new" });
+  context.after(() => {
+    sessionsService.register = original;
+  });
   const { response, result } = createResponse();
 
-  await controller.getSessions({}, response, assert.fail);
+  await register({ body: {} }, response, assert.fail);
 
-  assert.deepEqual(result, {
-    statusCode: 200,
-    body: { status: "success", payload: sessions },
-  });
+  assert.equal(result.statusCode, 201);
+  assert.deepEqual(result.body.payload, { _id: "new" });
 });
 
-test("sessions controller forwards service errors", async () => {
-  const expectedError = new Error("unexpected");
-  const sessionsService = {
-    async getSessions() {
-      throw expectedError;
-    },
+test("register controller maps duplicate email to 409", async (context) => {
+  const original = sessionsService.register;
+  sessionsService.register = async () => {
+    throw new UserEmailConflictError();
   };
-  const controller = createSessionsController({ sessionsService });
-  let forwardedError;
-
-  await controller.getSessions({}, {}, (error) => {
-    forwardedError = error;
+  context.after(() => {
+    sessionsService.register = original;
   });
+  const { response, result } = createResponse();
 
-  assert.equal(forwardedError, expectedError);
+  await register({ body: {} }, response, assert.fail);
+
+  assert.equal(result.statusCode, 409);
 });

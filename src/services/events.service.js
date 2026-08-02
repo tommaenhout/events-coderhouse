@@ -1,4 +1,5 @@
 import { pickFields } from "../utils/pickFields.js";
+import eventsRepository from "../repositories/events.repository.js";
 
 const eventFields = ["title", "description", "date", "location", "organizer"];
 const stringFields = ["title", "description", "location", "organizer"];
@@ -68,30 +69,32 @@ const requireEvent = (event) => {
   return event;
 };
 
-export const createEventsService = ({ eventRepository }) => ({
+class EventsService {
   getEvents() {
-    return eventRepository.findAll();
-  },
+    return eventsRepository.findAll();
+  }
 
   async getEventById(id) {
-    return requireEvent(await eventRepository.findById(id));
-  },
+    return requireEvent(await eventsRepository.findById(id));
+  }
 
   createEvent(eventData) {
-    return eventRepository.create(
+    return eventsRepository.create(
       validateEventData(eventData, { creating: true }),
     );
-  },
+  }
 
   async updateEvent(id, eventData) {
-    const event = await eventRepository.updateById(
+    const event = await eventsRepository.updateById(
       id,
       validateEventData(eventData),
     );
     return requireEvent(event);
-  },
+  }
 
   async deleteEvent(id) {
-    return requireEvent(await eventRepository.deleteById(id));
-  },
-});
+    return requireEvent(await eventsRepository.deleteById(id));
+  }
+}
+
+export default new EventsService();

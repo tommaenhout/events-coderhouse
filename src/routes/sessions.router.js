@@ -1,9 +1,8 @@
 import { Router } from "express";
+import { register } from "../controllers/sessions.controller.js";
 
-export const createSessionsRouter = ({ sessionsController }) => {
-  const sessionsRouter = Router();
+const router = Router();
 
-  sessionsRouter.get("/", sessionsController.getSessions);
+router.post("/register", register);
 
-  return sessionsRouter;
-};
+export default router;
