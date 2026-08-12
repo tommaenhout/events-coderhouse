@@ -1,12 +1,12 @@
 export const createErrorHandler = ({ logger = console } = {}) =>
-  (error, _request, response, _next) => {
+  (error, _req, res, _next) => {
     const isBadRequest =
       error.name === "CastError" ||
       error.name === "ValidationError" ||
       (error instanceof SyntaxError && error.status === 400);
 
     if (isBadRequest) {
-      response.status(400).json({
+      res.status(400).json({
         status: "error",
         message: "Solicitud inválida",
       });
@@ -14,7 +14,7 @@ export const createErrorHandler = ({ logger = console } = {}) =>
     }
 
     logger.error(error);
-    response.status(500).json({
+    res.status(500).json({
       status: "error",
       message: "Error interno del servidor",
     });

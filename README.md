@@ -8,10 +8,13 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 - Conexión a MongoDB local o MongoDB Atlas.
 - CRUD completo de eventos.
 - CRUD completo de usuarios, separado del módulo de sesiones.
-- Registro inicial de usuarios con contraseñas protegidas por bcrypt.
+- Registro de usuarios con contraseñas protegidas por bcrypt.
+- Login con JWT almacenado en cookies HTTP Only.
+- Consulta del usuario autenticado mediante una ruta protegida.
+- Renovación del token de acceso y cierre de sesión.
 - Validación de los datos de entrada.
 - Mensajes de respuesta y errores dirigidos al cliente en español.
-- Respuestas `400`, `404` y `500` consistentes.
+- Respuestas `400`, `401`, `404`, `409` y `500` consistentes.
 - Cierre controlado del servidor y de la conexión a MongoDB.
 - Pruebas unitarias con dependencias falsas, sin requerir una base de datos.
 
@@ -22,6 +25,8 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 - MongoDB Atlas
 - Mongoose
 - bcrypt
+- JSON Web Token
+- cookie-parser
 - dotenv
 - ECMAScript Modules
 - Node.js Test Runner
@@ -45,7 +50,10 @@ Variables disponibles:
 | `NODE_ENV` | Entorno de ejecución | `development` |
 | `MONGO_URL` | URI de conexión a MongoDB | `mongodb://127.0.0.1:27017/events-coderhouse` |
 | `MONGO_DB_NAME` | Base de datos utilizada | `events` |
-| `JWT_SECRET` | Secreto reservado para autenticación futura | `development-only-secret` |
+| `JWT_SECRET` | Secreto utilizado para firmar el token de acceso | `development-only-secret` |
+| `JWT_EXPIRES_IN` | Duración del token de acceso | `1h` |
+| `JWT_REFRESH_SECRET` | Secreto utilizado para firmar el refresh token | `development-only-refresh-secret` |
+| `JWT_REFRESH_EXPIRES_IN` | Duración del refresh token | `7d` |
 
 Ejemplo con MongoDB local:
 
@@ -55,6 +63,9 @@ NODE_ENV=development
 MONGO_URL=mongodb://127.0.0.1:27017/events-coderhouse
 MONGO_DB_NAME=events
 JWT_SECRET=development-only-secret
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_SECRET=development-only-refresh-secret
+JWT_REFRESH_EXPIRES_IN=7d
 ```
 
 Ejemplo con MongoDB Atlas:
@@ -65,6 +76,9 @@ NODE_ENV=development
 MONGO_URL=mongodb+srv://USUARIO:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w=majority
 MONGO_DB_NAME=events
 JWT_SECRET=development-only-secret
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_SECRET=development-only-refresh-secret
+JWT_REFRESH_EXPIRES_IN=7d
 ```
 
 En Atlas, el usuario debe tener permisos sobre la base de datos y la dirección
@@ -132,6 +146,10 @@ Las respuestas públicas nunca incluyen `password`.
 | `PUT` | `/api/users/:id` | Actualiza uno o más campos | `200`, `400`, `404`, `409` |
 | `DELETE` | `/api/users/:id` | Elimina un usuario | `200`, `400`, `404` |
 | `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
+| `POST` | `/api/sessions/login` | Autentica un usuario y crea las cookies JWT | `200`, `401`, `500` |
+| `GET` | `/api/sessions/current` | Devuelve el usuario autenticado | `200`, `401` |
+| `POST` | `/api/sessions/logout` | Elimina las cookies de autenticación | `200` |
+| `POST` | `/api/sessions/refresh` | Renueva la cookie del token de acceso | `200`, `401`, `500` |
 
 Todas las respuestas de eventos y usuarios usan esta estructura:
 
@@ -144,16 +162,24 @@ Todas las respuestas de eventos y usuarios usan esta estructura:
 
 Los errores usan `status: "error"` y un campo `message`.
 
-### Registro inicial de sesiones
+### Autenticación y sesiones
 
-El módulo de sesiones implementa únicamente el registro inicial:
+El módulo de sesiones implementa registro, login, consulta del usuario actual,
+renovación del token de acceso y logout:
 
 ```text
 sessions router -> sessions controller -> sessions service
+                -> auth middleware -> JWT utilities
 ```
 
-La contraseña se valida, se transforma con bcrypt y nunca se devuelve. Todavía
-no se implementan login, JWT, persistencia de sesiones ni autorización.
+Durante el login, la contraseña se compara mediante bcrypt. Si las credenciales
+son válidas, la API genera un token de acceso y un refresh token. Ambos se envían
+como cookies HTTP Only, por lo que no están disponibles para JavaScript del
+cliente. La cookie `currentUser` se utiliza para proteger `/current` y
+`refreshToken` permite emitir un nuevo token de acceso.
+
+El JWT de acceso incluye `id`, `email` y `role`; nunca incluye la contraseña.
+Las cookies usan `sameSite: "lax"` y solamente habilitan `secure` en producción.
 
 ## Probar la API con curl
 
@@ -257,6 +283,108 @@ curl --request POST "$BASE_URL/sessions/register" \
   }'
 ```
 
+Respuesta exitosa:
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "665f2a...",
+    "first_name": "Tom",
+    "last_name": "Tester",
+    "email": "tom@example.com",
+    "role": "user"
+  }
+}
+```
+
+Iniciar sesión y guardar las cookies en un archivo local de curl:
+
+```bash
+curl --request POST "$BASE_URL/sessions/login" \
+  --header "Content-Type: application/json" \
+  --cookie-jar cookies.txt \
+  --data '{
+    "email": "tom@example.com",
+    "password": "password123"
+  }'
+```
+
+Respuesta exitosa:
+
+```json
+{
+  "status": "success",
+  "message": "Login correcto"
+}
+```
+
+Si el email no existe, falta alguna credencial o la contraseña no coincide, la
+API responde sin revelar qué dato falló:
+
+```json
+{
+  "status": "error",
+  "message": "Credenciales inválidas"
+}
+```
+
+Consultar el usuario autenticado enviando la cookie `currentUser`:
+
+```bash
+curl --cookie cookies.txt "$BASE_URL/sessions/current"
+```
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "id": "665f2a...",
+    "email": "tom@example.com",
+    "role": "user"
+  }
+}
+```
+
+Sin una cookie válida, `/current` responde con `401`:
+
+```json
+{
+  "status": "error",
+  "message": "No autenticado"
+}
+```
+
+Renovar el token de acceso mediante la cookie `refreshToken`:
+
+```bash
+curl --request POST "$BASE_URL/sessions/refresh" \
+  --cookie cookies.txt \
+  --cookie-jar cookies.txt
+```
+
+```json
+{
+  "status": "success",
+  "message": "token renovado"
+}
+```
+
+Cerrar sesión y eliminar las cookies:
+
+```bash
+curl --request POST "$BASE_URL/sessions/logout" \
+  --cookie cookies.txt \
+  --cookie-jar cookies.txt
+```
+
+```json
+{
+  "status": "success",
+  "message": "logout correcto"
+}
+```
+
 ## Arquitectura por capas
 
 Cada módulo importa directamente la siguiente capa:
@@ -275,6 +403,9 @@ User model  -> user DAO  -> user repository  -> users service
 - Los repositorios importan sus DAO.
 - Los DAO importan los modelos de Mongoose.
 - El módulo de sesiones reutiliza el repositorio de usuarios.
+- `auth.middleware.js` verifica el JWT de acceso y asigna su payload a `req.user`.
+- `jwt.js` centraliza la creación y verificación de los tokens.
+- `hash.js` centraliza el hash y la comparación de contraseñas con bcrypt.
 - `errorHandler` centraliza los errores de Express y recibe el logger.
 - `app` importa los routers y configura Express.
 - `server.js` conecta MongoDB e inicia la aplicación.
@@ -308,7 +439,8 @@ events-coderhouse/
 │   │   └── users.errors.js
 │   ├── middlewares/
 │   │   ├── errorHandler.js
-│   │   └── notFoundHandler.js
+│   │   ├── notFoundHandler.js
+│   │   └── auth.middleware.js
 │   ├── models/
 │   │   ├── event.model.js
 │   │   └── user.model.js
@@ -325,6 +457,7 @@ events-coderhouse/
 │   │   └── users.service.js
 │   └── utils/
 │       ├── hash.js
+│       ├── jwt.js
 │       └── pickFields.js
 ├── test/
 │   ├── database.test.js
@@ -333,11 +466,13 @@ events-coderhouse/
 │   ├── events.dao.test.js
 │   ├── events.repository.test.js
 │   ├── events.service.test.js
+│   ├── jwt.test.js
 │   ├── notFoundHandler.test.js
 │   ├── pickFields.test.js
 │   ├── sessions.controller.test.js
 │   ├── sessions.service.test.js
 │   ├── startApplication.test.js
+│   ├── auth.middleware.test.js
 │   ├── users.controller.test.js
 │   ├── users.dao.test.js
 │   ├── users.repository.test.js
@@ -354,13 +489,13 @@ npm test
 ```
 
 Las pruebas verifican las consultas del DAO, la delegación del repositorio, las
-reglas del servicio y las respuestas del controlador. También cubren el registro,
-el middleware de errores, las utilidades y el ciclo de vida de la aplicación. No
-leen `.env` ni se conectan a MongoDB Atlas.
+reglas del servicio y las respuestas del controlador. También cubren registro,
+login, cookies de autenticación, generación y verificación de JWT, renovación de
+tokens, logout, middleware de autenticación, utilidades y ciclo de vida de la
+aplicación. No se conectan a MongoDB Atlas.
 
 ## Trabajo futuro
 
-- Autenticación y emisión de JWT.
 - Autorización por roles.
-- Persistencia real de sesiones cuando se incorpore autenticación.
+- Persistencia y revocación de refresh tokens.
 - Paginación y filtros para eventos.

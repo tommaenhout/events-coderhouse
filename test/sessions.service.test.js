@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SessionValidationError } from "../src/errors/sessions.errors.js";
+import {
+  InvalidCredentialsError,
+  SessionValidationError,
+} from "../src/errors/sessions.errors.js";
 import { UserEmailConflictError } from "../src/errors/users.errors.js";
 import usersRepository from "../src/repositories/users.repository.js";
 import sessionsService from "../src/services/sessions.service.js";
+import { createHash } from "../src/utils/hash.js";
 
 const stubRepository = (context, stubs) => {
   const originals = {};
@@ -70,5 +74,59 @@ test("sessions service validation messages are in Spanish", async () => {
     (error) =>
       error instanceof SessionValidationError &&
       error.message === "El formato del email no es válido",
+  );
+});
+
+test("sessions service validates the password before logging in", async (context) => {
+  const password = await createHash("password123");
+  stubRepository(context, {
+    findByEmail: async () => ({
+      _id: { toString: () => "user-id" },
+      email: "tom@example.com",
+      password,
+      role: "user",
+    }),
+  });
+
+  await assert.rejects(
+    sessionsService.login({
+      email: "tom@example.com",
+      password: "incorrect-password",
+    }),
+    InvalidCredentialsError,
+  );
+
+  const user = await sessionsService.login({
+    email: "TOM@example.com",
+    password: "password123",
+  });
+
+  assert.deepEqual(user, {
+    id: "user-id",
+    email: "tom@example.com",
+    role: "user",
+  });
+});
+
+test("sessions service rejects missing login credentials generically", async () => {
+  await assert.rejects(
+    sessionsService.login({ email: "tom@example.com" }),
+    InvalidCredentialsError,
+  );
+  await assert.rejects(
+    sessionsService.login({ password: "password123" }),
+    InvalidCredentialsError,
+  );
+});
+
+test("sessions service rejects an unknown login email", async (context) => {
+  stubRepository(context, { findByEmail: async () => null });
+
+  await assert.rejects(
+    sessionsService.login({
+      email: "missing@example.com",
+      password: "password123",
+    }),
+    InvalidCredentialsError,
   );
 });

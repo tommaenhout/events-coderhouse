@@ -1,7 +1,10 @@
 import usersRepository from "../repositories/users.repository.js";
-import { SessionValidationError } from "../errors/sessions.errors.js";
+import {
+  InvalidCredentialsError,
+  SessionValidationError,
+} from "../errors/sessions.errors.js";
 import { UserEmailConflictError } from "../errors/users.errors.js";
-import { createHash } from "../utils/hash.js";
+import { createHash, validatePassword } from "../utils/hash.js";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -66,6 +69,42 @@ class SessionsService {
     const { password: _password, ...userWithoutPassword } = createdUser;
 
     return userWithoutPassword;
+  }
+  async login(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new InvalidCredentialsError();
+    }
+
+    const { email, password } = data;
+
+    if (
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !email.trim() ||
+      !password
+    ) {
+      throw new InvalidCredentialsError();
+    }
+
+    const normalizeEmail = email.trim().toLowerCase();
+
+    const user = await usersRepository.findByEmail(normalizeEmail);
+
+    if (!user) {
+      throw new InvalidCredentialsError();
+    }
+
+    const validPassword = await validatePassword(password, user.password);
+
+    if (!validPassword) {
+      throw new InvalidCredentialsError();
+    }
+
+    return {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
   }
 }
 

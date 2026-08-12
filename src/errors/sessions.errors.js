@@ -4,3 +4,10 @@ export class SessionValidationError extends Error {
     this.name = "SessionValidationError";
   }
 }
+
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super("Credenciales inválidas");
+    this.name = "InvalidCredentialsError";
+  }
+}
