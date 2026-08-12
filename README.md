@@ -493,9 +493,3 @@ reglas del servicio y las respuestas del controlador. También cubren registro,
 login, cookies de autenticación, generación y verificación de JWT, renovación de
 tokens, logout, middleware de autenticación, utilidades y ciclo de vida de la
 aplicación. No se conectan a MongoDB Atlas.
-
-## Trabajo futuro
-
-- Autorización por roles.
-- Persistencia y revocación de refresh tokens.
-- Paginación y filtros para eventos.
