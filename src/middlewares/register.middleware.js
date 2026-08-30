@@ -1,4 +1,4 @@
-import passport from "passport";
+import passport from "../config/passport.js";
 
 import {
   UserEmailConflictError,

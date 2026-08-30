@@ -7,11 +7,11 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 
 - Conexión a MongoDB local o MongoDB Atlas.
 - CRUD completo de eventos.
-- CRUD completo de usuarios, separado del módulo de sesiones.
+- Consulta, actualización y eliminación de usuarios.
 - Registro de usuarios con contraseñas protegidas por bcrypt.
 - Login con JWT almacenado en cookies HTTP Only.
 - Consulta del usuario autenticado mediante una ruta protegida.
-- Renovación del token de acceso y cierre de sesión.
+- Cierre de sesión mediante eliminación de la cookie de acceso.
 - Validación de los datos de entrada.
 - Mensajes de respuesta y errores dirigidos al cliente en español.
 - Respuestas `400`, `401`, `404`, `409` y `500` consistentes.
@@ -27,6 +27,7 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 - bcrypt
 - JSON Web Token
 - cookie-parser
+- Passport, Passport Local y Passport JWT
 - dotenv
 - ECMAScript Modules
 - Node.js Test Runner
@@ -52,8 +53,9 @@ Variables disponibles:
 | `MONGO_DB_NAME` | Base de datos utilizada | `events` |
 | `JWT_SECRET` | Secreto utilizado para firmar el token de acceso | `development-only-secret` |
 | `JWT_EXPIRES_IN` | Duración del token de acceso | `1h` |
-| `JWT_REFRESH_SECRET` | Secreto utilizado para firmar el refresh token | `development-only-refresh-secret` |
-| `JWT_REFRESH_EXPIRES_IN` | Duración del refresh token | `7d` |
+| `JWT_COOKIE_EXPIRES_IN` | Duración de la cookie de acceso en milisegundos | `3600000` |
+| `JWT_REFRESH_SECRET` | Secreto de la utilidad de refresh token (sin endpoint activo) | `development-only-refresh-secret` |
+| `JWT_REFRESH_EXPIRES_IN` | Duración de la utilidad de refresh token (sin endpoint activo) | `7d` |
 
 Ejemplo con MongoDB local:
 
@@ -64,6 +66,7 @@ MONGO_URL=mongodb://127.0.0.1:27017/events-coderhouse
 MONGO_DB_NAME=events
 JWT_SECRET=development-only-secret
 JWT_EXPIRES_IN=1h
+JWT_COOKIE_EXPIRES_IN=3600000
 JWT_REFRESH_SECRET=development-only-refresh-secret
 JWT_REFRESH_EXPIRES_IN=7d
 ```
@@ -77,6 +80,7 @@ MONGO_URL=mongodb+srv://USUARIO:PASSWORD@CLUSTER.mongodb.net/?retryWrites=true&w
 MONGO_DB_NAME=events
 JWT_SECRET=development-only-secret
 JWT_EXPIRES_IN=1h
+JWT_COOKIE_EXPIRES_IN=3600000
 JWT_REFRESH_SECRET=development-only-refresh-secret
 JWT_REFRESH_EXPIRES_IN=7d
 ```
@@ -142,14 +146,12 @@ Las respuestas públicas nunca incluyen `password`.
 | `DELETE` | `/api/events/:id` | Elimina un evento | `200`, `400`, `404` |
 | `GET` | `/api/users` | Lista todos los usuarios | `200` |
 | `GET` | `/api/users/:id` | Obtiene un usuario | `200`, `400`, `404` |
-| `POST` | `/api/users` | Crea un usuario | `201`, `400`, `409` |
 | `PUT` | `/api/users/:id` | Actualiza uno o más campos | `200`, `400`, `404`, `409` |
 | `DELETE` | `/api/users/:id` | Elimina un usuario | `200`, `400`, `404` |
 | `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
-| `POST` | `/api/sessions/login` | Autentica un usuario y crea las cookies JWT | `200`, `401`, `500` |
+| `POST` | `/api/sessions/login` | Autentica un usuario y crea una cookie JWT | `200`, `401`, `500` |
 | `GET` | `/api/sessions/current` | Devuelve el usuario autenticado | `200`, `401` |
-| `POST` | `/api/sessions/logout` | Elimina las cookies de autenticación | `200` |
-| `POST` | `/api/sessions/refresh` | Renueva la cookie del token de acceso | `200`, `401`, `500` |
+| `POST` | `/api/sessions/logout` | Elimina la cookie de autenticación | `200` |
 
 Todas las respuestas de eventos y usuarios usan esta estructura:
 
@@ -164,19 +166,23 @@ Los errores usan `status: "error"` y un campo `message`.
 
 ### Autenticación y sesiones
 
-El módulo de sesiones implementa registro, login, consulta del usuario actual,
-renovación del token de acceso y logout:
+El módulo de sesiones implementa registro, login, consulta del usuario actual y
+logout mediante estrategias de Passport:
 
 ```text
-sessions router -> sessions controller -> sessions service
-                -> auth middleware -> JWT utilities
+sessions router -> Passport middleware -> Passport strategy
+                                      -> users service/repository
+                -> sessions controller -> JWT cookie/response
 ```
 
-Durante el login, la contraseña se compara mediante bcrypt. Si las credenciales
-son válidas, la API genera un token de acceso y un refresh token. Ambos se envían
-como cookies HTTP Only, por lo que no están disponibles para JavaScript del
-cliente. La cookie `currentUser` se utiliza para proteger `/current` y
-`refreshToken` permite emitir un nuevo token de acceso.
+La estrategia local `register` delega la validación, el hash y la persistencia a
+`UsersService.registerUser`. La estrategia local `login` busca el usuario y
+compara la contraseña mediante bcrypt. Si las credenciales son válidas, el
+middleware coloca un usuario público en `req.user` y el controlador genera un
+JWT de acceso en la cookie HTTP Only `currentUser`.
+
+La estrategia JWT `current` extrae esa cookie, verifica el token y vuelve a
+consultar el usuario antes de entregar una respuesta mediante `UserDTO`.
 
 El JWT de acceso incluye `id`, `email` y `role`; nunca incluye la contraseña.
 Las cookies usan `sameSite: "lax"` y solamente habilitan `secure` en producción.
@@ -287,14 +293,7 @@ Respuesta exitosa:
 
 ```json
 {
-  "status": "success",
-  "payload": {
-    "_id": "665f2a...",
-    "first_name": "Tom",
-    "last_name": "Tester",
-    "email": "tom@example.com",
-    "role": "user"
-  }
+  "message": "Usuario registrado exitosamente"
 }
 ```
 
@@ -315,7 +314,7 @@ Respuesta exitosa:
 ```json
 {
   "status": "success",
-  "message": "Login correcto"
+  "message": "Login exitoso"
 }
 ```
 
@@ -346,29 +345,7 @@ curl --cookie cookies.txt "$BASE_URL/sessions/current"
 }
 ```
 
-Sin una cookie válida, `/current` responde con `401`:
-
-```json
-{
-  "status": "error",
-  "message": "No autenticado"
-}
-```
-
-Renovar el token de acceso mediante la cookie `refreshToken`:
-
-```bash
-curl --request POST "$BASE_URL/sessions/refresh" \
-  --cookie cookies.txt \
-  --cookie-jar cookies.txt
-```
-
-```json
-{
-  "status": "success",
-  "message": "token renovado"
-}
-```
+Sin una cookie válida, `/current` responde con `401 Unauthorized`.
 
 Cerrar sesión y eliminar las cookies:
 
@@ -381,7 +358,7 @@ curl --request POST "$BASE_URL/sessions/logout" \
 ```json
 {
   "status": "success",
-  "message": "logout correcto"
+  "message": "Logout correcto"
 }
 ```
 
@@ -395,6 +372,8 @@ Event model -> event DAO -> event repository -> events service
              -> events controller -> events router -> app
 User model  -> user DAO  -> user repository  -> users service
              -> users controller  -> users router  -> app
+Passport config -> register/login/current strategies -> sessions middleware
+                -> sessions controller -> sessions router -> app
 ```
 
 - Los routers importan sus controladores.
@@ -402,8 +381,9 @@ User model  -> user DAO  -> user repository  -> users service
 - Los servicios importan sus repositorios.
 - Los repositorios importan sus DAO.
 - Los DAO importan los modelos de Mongoose.
-- El módulo de sesiones reutiliza el repositorio de usuarios.
-- `auth.middleware.js` verifica el JWT de acceso y asigna su payload a `req.user`.
+- El registro reutiliza `UsersService`; login y current reutilizan el repositorio
+  de usuarios.
+- Passport Local procesa registro y login; Passport JWT protege `/current`.
 - `jwt.js` centraliza la creación y verificación de los tokens.
 - `hash.js` centraliza el hash y la comparación de contraseñas con bcrypt.
 - `errorHandler` centraliza los errores de Express y recibe el logger.
@@ -425,12 +405,15 @@ events-coderhouse/
 │   ├── startApplication.js
 │   ├── config/
 │   │   ├── database.js
-│   │   └── env.js
+│   │   ├── env.js
+│   │   └── passport.js
 │   ├── controllers/
 │   │   ├── events.controller.js
 │   │   ├── health.controller.js
 │   │   ├── sessions.controller.js
 │   │   └── users.controller.js
+│   ├── dto/
+│   │   └── user.dto.js
 │   ├── dao/
 │   │   ├── events.dao.js
 │   │   └── users.dao.js
@@ -438,9 +421,11 @@ events-coderhouse/
 │   │   ├── sessions.errors.js
 │   │   └── users.errors.js
 │   ├── middlewares/
+│   │   ├── auth.middleware.js
 │   │   ├── errorHandler.js
+│   │   ├── login.middleware.js
 │   │   ├── notFoundHandler.js
-│   │   └── auth.middleware.js
+│   │   └── register.middleware.js
 │   ├── models/
 │   │   ├── event.model.js
 │   │   └── user.model.js
@@ -453,7 +438,6 @@ events-coderhouse/
 │   │   └── users.router.js
 │   ├── services/
 │   │   ├── events.service.js
-│   │   ├── sessions.service.js
 │   │   └── users.service.js
 │   └── utils/
 │       ├── hash.js
@@ -467,10 +451,12 @@ events-coderhouse/
 │   ├── events.repository.test.js
 │   ├── events.service.test.js
 │   ├── jwt.test.js
+│   ├── login.middleware.test.js
 │   ├── notFoundHandler.test.js
+│   ├── passport.test.js
 │   ├── pickFields.test.js
+│   ├── register.middleware.test.js
 │   ├── sessions.controller.test.js
-│   ├── sessions.service.test.js
 │   ├── startApplication.test.js
 │   ├── auth.middleware.test.js
 │   ├── users.controller.test.js
@@ -489,7 +475,7 @@ npm test
 ```
 
 Las pruebas verifican las consultas del DAO, la delegación del repositorio, las
-reglas del servicio y las respuestas del controlador. También cubren registro,
-login, cookies de autenticación, generación y verificación de JWT, renovación de
-tokens, logout, middleware de autenticación, utilidades y ciclo de vida de la
-aplicación. No se conectan a MongoDB Atlas.
+reglas del servicio y las respuestas del controlador. También cubren las
+estrategias Passport de registro, login y current, la cookie de autenticación,
+la generación y verificación de JWT, logout, middleware, utilidades y ciclo de
+vida de la aplicación. No se conectan a MongoDB Atlas.

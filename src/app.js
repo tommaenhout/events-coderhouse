@@ -7,9 +7,7 @@ import eventsRouter from "./routes/events.router.js";
 import usersRouter from "./routes/users.router.js";
 import sessionsRouter from "./routes/sessions.router.js";
 import cookieParser from "cookie-parser";
-import passport from "passport";
-
-import "./config/passport.js";
+import passport from "./config/passport.js";
 
 const app = express();
 
