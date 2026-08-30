@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  createUser,
   deleteUser,
   getUserById,
   getUsers,
@@ -43,7 +42,6 @@ test("users controllers map CRUD results to HTTP", async (context) => {
   const methods = {
     getUsers: async () => ["all"],
     getUserById: async (id) => ({ id }),
-    createUser: async (data) => ({ id: "new", ...data }),
     updateUser: async (id, data) => ({ id, ...data }),
     deleteUser: async (id) => ({ id }),
   };
@@ -51,14 +49,13 @@ test("users controllers map CRUD results to HTTP", async (context) => {
     stubService(context, method, implementation);
   }
 
-  const responses = Array.from({ length: 5 }, createResponse);
+  const responses = Array.from({ length: 4 }, createResponse);
   await getUsers({}, responses[0].response, assert.fail);
   await getUserById({ params: { id: "one" } }, responses[1].response, assert.fail);
-  await createUser({ body: {} }, responses[2].response, assert.fail);
-  await updateUser({ params: { id: "one" }, body: {} }, responses[3].response, assert.fail);
-  await deleteUser({ params: { id: "one" } }, responses[4].response, assert.fail);
+  await updateUser({ params: { id: "one" }, body: {} }, responses[2].response, assert.fail);
+  await deleteUser({ params: { id: "one" } }, responses[3].response, assert.fail);
 
-  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 201, 200, 200]);
+  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 200, 200]);
 });
 
 test("users controller maps domain errors", async (context) => {

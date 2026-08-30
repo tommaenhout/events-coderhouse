@@ -73,22 +73,31 @@ const withoutPassword = (user) => {
 };
 
 class UsersService {
+  async registerUser(userData) {
+    const data = validateUserData(userData, { creating: true });
+
+    const existingUser = await usersRepository.findByEmail(data.email);
+
+    if (existingUser) {
+      throw new UserEmailConflictError();
+    }
+
+    data.password = await createHash(data.password);
+
+    const newUser = await usersRepository.create({
+      ...data,
+      provider: "local",
+      providerId: null,
+    });
+
+    return withoutPassword(newUser);
+  }
   getUsers() {
     return usersRepository.findAll();
   }
 
   async getUserById(id) {
     return requireUser(await usersRepository.findById(id));
-  }
-
-  async createUser(userData) {
-    const data = validateUserData(userData, { creating: true });
-    if (await usersRepository.findByEmail(data.email)) {
-      throw new UserEmailConflictError();
-    }
-
-    data.password = await createHash(data.password);
-    return withoutPassword(await usersRepository.create(data));
   }
 
   async updateUser(id, userData) {

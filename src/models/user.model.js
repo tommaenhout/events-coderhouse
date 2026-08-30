@@ -26,6 +26,15 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "organizer", "admin"],
       default: "user",
     },
+    provider: {
+      type: String,
+      enum: ["local"],
+      default: "local",
+    },
+    providerId: {
+      type: String,
+      default: null,
+    },
   },
   {
     collection: "users",

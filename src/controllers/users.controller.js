@@ -36,15 +36,6 @@ export const getUserById = async (req, res, next) => {
   }
 };
 
-export const createUser = async (req, res, next) => {
-  try {
-    const user = await usersService.createUser(req.body);
-    return res.status(201).json({ status: "success", payload: user });
-  } catch (error) {
-    return handleServiceError(error, res, next);
-  }
-};
-
 export const updateUser = async (req, res, next) => {
   try {
     const user = await usersService.updateUser(req.params.id, req.body);

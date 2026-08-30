@@ -28,7 +28,7 @@ test("users service hashes passwords and returns a public user", async (context)
     },
   });
 
-  const user = await usersService.createUser({
+  const user = await usersService.registerUser({
     first_name: " Tom ",
     last_name: " Tester ",
     email: " TOM@example.com ",
@@ -43,7 +43,7 @@ test("users service hashes passwords and returns a public user", async (context)
 
 test("users service validates duplicates and missing users", async (context) => {
   assert.rejects(
-    usersService.createUser({ first_name: "Tom" }),
+    usersService.registerUser({ first_name: "Tom" }),
     UserValidationError,
   );
 
@@ -53,7 +53,7 @@ test("users service validates duplicates and missing users", async (context) => 
   });
 
   await assert.rejects(
-    usersService.createUser({
+    usersService.registerUser({
       first_name: "Tom",
       last_name: "Tester",
       email: "tom@example.com",

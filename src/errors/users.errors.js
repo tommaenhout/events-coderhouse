@@ -16,5 +16,6 @@ export class UserEmailConflictError extends Error {
   constructor() {
     super("El email ya está registrado");
     this.name = "UserEmailConflictError";
+    this.code = "EMAIL_EXISTS";
   }
 }
