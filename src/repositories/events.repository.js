@@ -16,10 +16,6 @@ class EventsRepository {
   updateById(id, eventData) {
     return eventsDao.updateById(id, eventData);
   }
-
-  deleteById(id) {
-    return eventsDao.deleteById(id);
-  }
 }
 
 export default new EventsRepository();

@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   createEvent,
-  deleteEvent,
   getEventById,
   getEvents,
   updateEvent,
@@ -37,30 +36,31 @@ const stubService = (context, method, implementation) => {
   });
 };
 
-test("events controllers map CRUD results to HTTP", async (context) => {
+test("events controllers map results to HTTP", async (context) => {
   const methods = {
     getEvents: async () => ["all"],
     getEventById: async (id) => ({ id }),
-    createEvent: async (data) => ({ id: "new", ...data }),
+    createEvent: async (data, userId) => {
+      assert.equal(userId, "owner");
+      return { id: "new", ...data };
+    },
     updateEvent: async (id, data) => ({ id, ...data }),
-    deleteEvent: async (id) => ({ id }),
   };
   for (const [method, implementation] of Object.entries(methods)) {
     stubService(context, method, implementation);
   }
 
-  const responses = Array.from({ length: 5 }, createResponse);
+  const responses = Array.from({ length: 4 }, createResponse);
   await getEvents({}, responses[0].response, assert.fail);
   await getEventById({ params: { id: "one" } }, responses[1].response, assert.fail);
-  await createEvent({ body: { title: "New" } }, responses[2].response, assert.fail);
+  await createEvent({ body: { title: "New" }, user: { id: "owner" } }, responses[2].response, assert.fail);
   await updateEvent(
     { params: { id: "one" }, body: { title: "Updated" } },
     responses[3].response,
     assert.fail,
   );
-  await deleteEvent({ params: { id: "one" } }, responses[4].response, assert.fail);
 
-  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 201, 200, 200]);
+  assert.deepEqual(responses.map(({ result }) => result.statusCode), [200, 200, 201, 200]);
 });
 
 test("events controller maps domain errors", async (context) => {

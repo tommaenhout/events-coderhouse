@@ -4,7 +4,6 @@ class UsersRepository {
   findAll() {
     return usersDao.findAll();
   }
-
   findById(id) {
     return usersDao.findById(id);
   }
@@ -15,14 +14,6 @@ class UsersRepository {
 
   create(userData) {
     return usersDao.create(userData);
-  }
-
-  updateById(id, userData) {
-    return usersDao.updateById(id, userData);
-  }
-
-  deleteById(id) {
-    return usersDao.deleteById(id);
   }
 }
 

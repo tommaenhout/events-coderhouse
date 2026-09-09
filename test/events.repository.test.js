@@ -4,10 +4,10 @@ import test from "node:test";
 import eventsDao from "../src/dao/events.dao.js";
 import eventsRepository from "../src/repositories/events.repository.js";
 
-test("events repository delegates CRUD operations to the DAO", async (context) => {
+test("events repository delegates operations to the DAO", async (context) => {
   const calls = [];
   const originals = {};
-  for (const method of ["findAll", "findById", "create", "updateById", "deleteById"]) {
+  for (const method of ["findAll", "findById", "create", "updateById"]) {
     originals[method] = eventsDao[method];
     eventsDao[method] = async (...args) => {
       calls.push([method, ...args]);
@@ -23,12 +23,10 @@ test("events repository delegates CRUD operations to the DAO", async (context) =
     await eventsRepository.updateById("one", { title: "Updated" }),
     "updateById",
   );
-  assert.equal(await eventsRepository.deleteById("one"), "deleteById");
   assert.deepEqual(calls, [
     ["findAll"],
     ["findById", "one"],
     ["create", { title: "New" }],
     ["updateById", "one", { title: "Updated" }],
-    ["deleteById", "one"],
   ]);
 });

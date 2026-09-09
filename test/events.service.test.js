@@ -29,13 +29,33 @@ test("events service validates and delegates event creation", async (context) =>
     title: "Conference",
     date: "2026-09-01T18:00:00.000Z",
     ignored: true,
-  });
+    organizer: "someone-else",
+  }, "owner");
 
   assert.deepEqual(persistedData, {
     title: "Conference",
     date: "2026-09-01T18:00:00.000Z",
+    organizer: "owner",
   });
   assert.equal(event.id, "new");
+});
+
+test("event updates cannot change the organizer", async (context) => {
+  stubRepository(context, {
+    updateById: async (id, data) => {
+      assert.deepEqual(data, { title: "Updated" });
+      return { id, ...data, organizer: "owner" };
+    },
+  });
+  const event = await eventsService.updateEvent("one", {
+    title: "Updated",
+    organizer: "someone-else",
+  });
+  assert.equal(event.organizer, "owner");
+  await assert.rejects(
+    eventsService.updateEvent("one", { organizer: "someone-else" }),
+    EventValidationError,
+  );
 });
 
 test("events service reports validation and not-found errors", async (context) => {

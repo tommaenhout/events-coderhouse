@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   UserEmailConflictError,
-  UserNotFoundError,
   UserValidationError,
 } from "../src/errors/users.errors.js";
 import usersRepository from "../src/repositories/users.repository.js";
@@ -41,15 +40,14 @@ test("users service hashes passwords and returns a public user", async (context)
   assert.equal(persistedUser.first_name, "Tom");
 });
 
-test("users service validates duplicates and missing users", async (context) => {
-  assert.rejects(
+test("users service validates registration data and duplicates", async (context) => {
+  await assert.rejects(
     usersService.registerUser({ first_name: "Tom" }),
     UserValidationError,
   );
 
   stubRepository(context, {
     findByEmail: async () => ({ _id: "existing" }),
-    findById: async () => null,
   });
 
   await assert.rejects(
@@ -61,5 +59,4 @@ test("users service validates duplicates and missing users", async (context) => 
     }),
     UserEmailConflictError,
   );
-  await assert.rejects(usersService.getUserById("missing"), UserNotFoundError);
 });

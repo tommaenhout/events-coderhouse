@@ -12,7 +12,6 @@ class UsersDao {
   findAll() {
     return User.find().select("-password").lean();
   }
-
   findById(id) {
     return User.findById(id).select("-password").lean();
   }
@@ -28,23 +27,6 @@ class UsersDao {
     } catch (error) {
       return translateWriteError(error);
     }
-  }
-
-  async updateById(id, userData) {
-    try {
-      return await User.findByIdAndUpdate(id, userData, {
-        new: true,
-        runValidators: true,
-      })
-        .select("-password")
-        .lean();
-    } catch (error) {
-      return translateWriteError(error);
-    }
-  }
-
-  deleteById(id) {
-    return User.findByIdAndDelete(id).select("-password").lean();
   }
 }
 

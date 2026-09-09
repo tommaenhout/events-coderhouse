@@ -31,7 +31,13 @@ test("register strategy delegates user creation to UsersService", async (context
 
   const result = await verifyStrategy(
     passport._strategy("register"),
-    { body: { first_name: "Tom", last_name: "Tester" } },
+    {
+      body: {
+        first_name: "Tom",
+        last_name: "Tester",
+        role: "admin",
+      },
+    },
     "tom@example.com",
     "password123",
   );
@@ -42,6 +48,7 @@ test("register strategy delegates user creation to UsersService", async (context
     email: "tom@example.com",
     password: "password123",
   });
+  assert.equal(Object.hasOwn(receivedData, "role"), false);
   assert.equal(result.error, null);
   assert.equal(result.user, createdUser);
 });

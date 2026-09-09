@@ -6,7 +6,7 @@ una arquitectura por capas basada en importaciones directas entre módulos.
 ## Funcionalidades
 
 - Conexión a MongoDB local o MongoDB Atlas.
-- CRUD completo de eventos.
+- Creación, consulta y actualización de eventos.
 - Consulta, actualización y eliminación de usuarios.
 - Registro de usuarios con contraseñas protegidas por bcrypt.
 - Login con JWT almacenado en cookies HTTP Only.
@@ -117,7 +117,7 @@ solamente después de establecer la conexión con MongoDB.
 | `date` | `Date` | Sí | Fecha válida en formato ISO 8601 |
 | `description` | `String` | No | Descripción del evento |
 | `location` | `String` | No | Ubicación |
-| `organizer` | `String` | No | Organizador |
+| `organizer` | `ObjectId` | Sí | Referencia a User, asignada automáticamente al usuario autenticado; no se puede modificar |
 
 Mongoose agrega automáticamente `createdAt` y `updatedAt`. Los campos que no
 pertenecen al modelo son descartados por el servicio.
@@ -134,26 +134,86 @@ pertenecen al modelo son descartados por el servicio.
 
 Las respuestas públicas nunca incluyen `password`.
 
+### Roles y matriz de permisos
+
+El sistema reconoce tres roles. Toda cuenta creada mediante el registro público
+recibe el rol `user`; un valor `role` enviado en el cuerpo de esa solicitud no
+permite crear cuentas `organizer` ni `admin`.
+
+| Acción | `user` | `organizer` | `admin` |
+| --- | :---: | :---: | :---: |
+| Consultar eventos | ✅ | ✅ | ✅ |
+| Crear eventos | ❌ | ✅ | ✅ |
+| Modificar eventos propios | ❌ | ✅ | ✅ |
+| Modificar cualquier evento | ❌ | ❌ | ✅ |
+| Ver todos los usuarios | ❌ | ❌ | ✅ |
+
+Un `organizer` solamente puede modificar los eventos cuyo campo `organizer`
+coincida con su identificador de usuario. Aunque tenga el rol correcto, recibe
+`403 Forbidden` cuando intenta modificar un evento ajeno. Un `admin` puede
+modificar cualquier evento.
+
+### Rutas protegidas
+
+| Método | Ruta | Acceso requerido |
+| --- | --- | --- |
+| `GET` | `/api/sessions/current` | Cualquier usuario autenticado |
+| `GET` | `/api/events/:id` | Cualquier usuario autenticado |
+| `POST` | `/api/events` | `organizer` o `admin` |
+| `PUT` | `/api/events/:id` | `organizer` propietario del evento o `admin` |
+| `GET` | `/api/users` | Solo `admin` |
+
+Las rutas de eventos y usuarios ejecutan primero `authMiddleware`, que valida el
+JWT almacenado en la cookie `currentUser` y asigna su contenido a `req.user`.
+Después, `authorizeRoles` compara `req.user.role` con los roles permitidos para
+la operación. La ruta `/api/sessions/current` también valida el JWT de la cookie
+mediante la estrategia `current` de Passport.
+
+### Diferencia entre 401 y 403
+
+- `401 Unauthorized`: no existe una sesión válida. Ocurre cuando falta la cookie
+  JWT o cuando el token es inválido o está vencido.
+- `403 Forbidden`: existe una sesión válida, pero el rol o la propiedad del
+  recurso no permiten realizar la acción solicitada.
+
+Respuesta sin una sesión válida (`401`):
+
+```json
+{
+  "status": "error",
+  "message": "No autenticado"
+}
+```
+
+Respuesta de un usuario autenticado sin permisos (`403`):
+
+```json
+{
+  "status": "error",
+  "message": "Acceso denegado"
+}
+```
+
+Por ejemplo, un usuario con rol `user` recibe `403` al ejecutar
+`POST /api/events`. Un `organizer` también recibe `403` al consultar
+`GET /api/users` o al intentar modificar un evento perteneciente a otra persona.
+
 ## Endpoints
 
 | Método | Ruta | Descripción | Respuestas |
 | --- | --- | --- | --- |
 | `GET` | `/api/health` | Comprueba el estado del servidor | `200` |
 | `GET` | `/api/events` | Lista todos los eventos | `200` |
-| `GET` | `/api/events/:id` | Obtiene un evento | `200`, `400`, `404` |
-| `POST` | `/api/events` | Crea un evento | `201`, `400` |
-| `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `404` |
-| `DELETE` | `/api/events/:id` | Elimina un evento | `200`, `400`, `404` |
-| `GET` | `/api/users` | Lista todos los usuarios | `200` |
-| `GET` | `/api/users/:id` | Obtiene un usuario | `200`, `400`, `404` |
-| `PUT` | `/api/users/:id` | Actualiza uno o más campos | `200`, `400`, `404`, `409` |
-| `DELETE` | `/api/users/:id` | Elimina un usuario | `200`, `400`, `404` |
+| `GET` | `/api/events/:id` | Obtiene un evento | `200`, `400`, `401`, `404` |
+| `POST` | `/api/events` | Crea un evento | `201`, `400`, `401`, `403` |
+| `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `401`, `403`, `404` |
 | `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
 | `POST` | `/api/sessions/login` | Autentica un usuario y crea una cookie JWT | `200`, `401`, `500` |
 | `GET` | `/api/sessions/current` | Devuelve el usuario autenticado | `200`, `401` |
 | `POST` | `/api/sessions/logout` | Elimina la cookie de autenticación | `200` |
+| `GET` | `/api/users` | Lista todos los usuarios; solo para administradores | `200`, `401`, `403` |
 
-Todas las respuestas de eventos y usuarios usan esta estructura:
+Las respuestas de eventos usan esta estructura:
 
 ```json
 {
@@ -205,13 +265,13 @@ Crear un evento:
 
 ```bash
 curl --request POST "$BASE_URL/events" \
+  --cookie cookies.txt \
   --header "Content-Type: application/json" \
   --data '{
     "title": "Conferencia de JavaScript",
     "description": "Encuentro para desarrolladores",
     "date": "2026-09-01T18:00:00.000Z",
-    "location": "Buenos Aires",
-    "organizer": "Coderhouse"
+    "location": "Buenos Aires"
   }'
 ```
 
@@ -242,38 +302,6 @@ curl --request PUT "$BASE_URL/events/$EVENT_ID" \
     "title": "Conferencia de JavaScript actualizada",
     "location": "Palermo, Buenos Aires"
   }'
-```
-
-Eliminar el evento:
-
-```bash
-curl --request DELETE "$BASE_URL/events/$EVENT_ID"
-```
-
-Crear un usuario:
-
-```bash
-curl --request POST "$BASE_URL/users" \
-  --header "Content-Type: application/json" \
-  --data '{
-    "first_name": "Tom",
-    "last_name": "Tester",
-    "email": "tom@example.com",
-    "password": "password123",
-    "role": "user"
-  }'
-```
-
-Los demás endpoints de usuarios siguen el mismo patrón del CRUD de eventos:
-
-```bash
-USER_ID="REEMPLAZAR_CON_EL_ID"
-curl "$BASE_URL/users"
-curl "$BASE_URL/users/$USER_ID"
-curl --request PUT "$BASE_URL/users/$USER_ID" \
-  --header "Content-Type: application/json" \
-  --data '{"first_name":"Tom actualizado"}'
-curl --request DELETE "$BASE_URL/users/$USER_ID"
 ```
 
 Registrar un usuario mediante sesiones:
@@ -371,7 +399,7 @@ Mongoose -> database
 Event model -> event DAO -> event repository -> events service
              -> events controller -> events router -> app
 User model  -> user DAO  -> user repository  -> users service
-             -> users controller  -> users router  -> app
+             -> users controller -> users router -> app
 Passport config -> register/login/current strategies -> sessions middleware
                 -> sessions controller -> sessions router -> app
 ```
@@ -422,6 +450,8 @@ events-coderhouse/
 │   │   └── users.errors.js
 │   ├── middlewares/
 │   │   ├── auth.middleware.js
+│   │   ├── authorizeEventOwnerOrAdmin.js
+│   │   ├── authorizeRole.js
 │   │   ├── errorHandler.js
 │   │   ├── login.middleware.js
 │   │   ├── notFoundHandler.js
@@ -440,12 +470,16 @@ events-coderhouse/
 │   │   ├── events.service.js
 │   │   └── users.service.js
 │   └── utils/
+│       ├── handleServiceError.js
 │       ├── hash.js
 │       ├── jwt.js
 │       └── pickFields.js
 ├── test/
+│   ├── admin-users-route.test.js
 │   ├── database.test.js
 │   ├── errorHandler.test.js
+│   ├── event-owner.middleware.test.js
+│   ├── events-authorization.routes.test.js
 │   ├── events.controller.test.js
 │   ├── events.dao.test.js
 │   ├── events.repository.test.js
@@ -459,7 +493,6 @@ events-coderhouse/
 │   ├── sessions.controller.test.js
 │   ├── startApplication.test.js
 │   ├── auth.middleware.test.js
-│   ├── users.controller.test.js
 │   ├── users.dao.test.js
 │   ├── users.repository.test.js
 │   └── users.service.test.js

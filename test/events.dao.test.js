@@ -13,7 +13,7 @@ const stubModel = (context, stubs) => {
   context.after(() => Object.assign(Event, originals));
 };
 
-test("events DAO executes Mongoose CRUD operations", async (context) => {
+test("events DAO executes Mongoose operations", async (context) => {
   const calls = [];
   const lean = (value) => ({ lean: () => value });
   stubModel(context, {
@@ -24,7 +24,6 @@ test("events DAO executes Mongoose CRUD operations", async (context) => {
       calls.push([id, data, options]);
       return lean({ id, ...data });
     },
-    findByIdAndDelete: (id) => lean({ id }),
   });
 
   assert.deepEqual(await eventsDao.findAll(), ["all"]);
@@ -37,7 +36,6 @@ test("events DAO executes Mongoose CRUD operations", async (context) => {
     id: "one",
     title: "Updated",
   });
-  assert.deepEqual(await eventsDao.deleteById("one"), { id: "one" });
   assert.deepEqual(calls, [
     ["one", { title: "Updated" }, { new: true, runValidators: true }],
   ]);

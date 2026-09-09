@@ -5,13 +5,6 @@ export class UserValidationError extends Error {
   }
 }
 
-export class UserNotFoundError extends Error {
-  constructor() {
-    super("Usuario no encontrado");
-    this.name = "UserNotFoundError";
-  }
-}
-
 export class UserEmailConflictError extends Error {
   constructor() {
     super("El email ya está registrado");

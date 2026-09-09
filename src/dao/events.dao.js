@@ -20,10 +20,6 @@ class EventsDao {
       runValidators: true,
     }).lean();
   }
-
-  deleteById(id) {
-    return Event.findByIdAndDelete(id).lean();
-  }
 }
 
 export default new EventsDao();

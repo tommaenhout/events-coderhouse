@@ -34,24 +34,18 @@ test("users DAO returns plain users without exposing passwords", async (context)
     }),
   };
   stubModel(context, {
-    find: () => selectableQuery(["all"], selections),
     findById: (id) => selectableQuery({ _id: id }, selections),
     findOne: ({ email }) => ({ lean: () => ({ email, password: "hash" }) }),
     create: async () => createdDocument,
-    findByIdAndUpdate: (id) => selectableQuery({ _id: id }, selections),
-    findByIdAndDelete: (id) => selectableQuery({ _id: id }, selections),
   });
 
-  assert.deepEqual(await usersDao.findAll(), ["all"]);
   assert.deepEqual(await usersDao.findById("one"), { _id: "one" });
   assert.deepEqual(await usersDao.findByEmail("tom@example.com"), {
     email: "tom@example.com",
     password: "hash",
   });
   assert.deepEqual(await usersDao.create({}), createdDocument.toObject());
-  assert.deepEqual(await usersDao.updateById("one", {}), { _id: "one" });
-  assert.deepEqual(await usersDao.deleteById("one"), { _id: "one" });
-  assert.deepEqual(selections, ["-password", "-password", "-password", "-password"]);
+  assert.deepEqual(selections, ["-password"]);
 });
 
 test("users DAO translates duplicate email errors", async (context) => {

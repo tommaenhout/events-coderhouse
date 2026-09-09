@@ -1,6 +1,5 @@
 import {
   UserEmailConflictError,
-  UserNotFoundError,
   UserValidationError,
 } from "../errors/users.errors.js";
 import usersRepository from "../repositories/users.repository.js";
@@ -12,7 +11,7 @@ const allowedRoles = new Set(["user", "organizer", "admin"]);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const minimumPasswordLength = 8;
 
-const validateUserData = (body, { creating = false } = {}) => {
+const validateUserData = (body) => {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new UserValidationError("El cuerpo debe ser un objeto JSON");
   }
@@ -23,7 +22,7 @@ const validateUserData = (body, { creating = false } = {}) => {
   }
 
   const requiredFields = ["first_name", "last_name", "email", "password"];
-  if (creating && requiredFields.some((field) => !data[field])) {
+  if (requiredFields.some((field) => !data[field])) {
     throw new UserValidationError(
       "first_name, last_name, email y password son obligatorios",
     );
@@ -60,13 +59,6 @@ const validateUserData = (body, { creating = false } = {}) => {
   return data;
 };
 
-const requireUser = (user) => {
-  if (!user) {
-    throw new UserNotFoundError();
-  }
-  return user;
-};
-
 const withoutPassword = (user) => {
   const { password: _password, ...userWithoutPassword } = user;
   return userWithoutPassword;
@@ -74,7 +66,7 @@ const withoutPassword = (user) => {
 
 class UsersService {
   async registerUser(userData) {
-    const data = validateUserData(userData, { creating: true });
+    const data = validateUserData(userData);
 
     const existingUser = await usersRepository.findByEmail(data.email);
 
@@ -92,32 +84,9 @@ class UsersService {
 
     return withoutPassword(newUser);
   }
-  getUsers() {
-    return usersRepository.findAll();
-  }
-
-  async getUserById(id) {
-    return requireUser(await usersRepository.findById(id));
-  }
-
-  async updateUser(id, userData) {
-    const data = validateUserData(userData);
-    if (data.email) {
-      const existingUser = await usersRepository.findByEmail(data.email);
-      if (existingUser && String(existingUser._id) !== id) {
-        throw new UserEmailConflictError();
-      }
-    }
-
-    if (data.password) {
-      data.password = await createHash(data.password);
-    }
-
-    return requireUser(await usersRepository.updateById(id, data));
-  }
-
-  async deleteUser(id) {
-    return requireUser(await usersRepository.deleteById(id));
+  async getAllUsers() {
+    const users = await usersRepository.findAll();
+    return users.map(withoutPassword);
   }
 }
 

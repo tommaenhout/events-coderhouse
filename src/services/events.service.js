@@ -1,8 +1,8 @@
 import { pickFields } from "../utils/pickFields.js";
 import eventsRepository from "../repositories/events.repository.js";
 
-const eventFields = ["title", "description", "date", "location", "organizer"];
-const stringFields = ["title", "description", "location", "organizer"];
+const eventFields = ["title", "description", "date", "location"];
+const stringFields = ["title", "description", "location"];
 
 export class EventValidationError extends Error {
   constructor(message) {
@@ -78,10 +78,11 @@ class EventsService {
     return requireEvent(await eventsRepository.findById(id));
   }
 
-  createEvent(eventData) {
-    return eventsRepository.create(
-      validateEventData(eventData, { creating: true }),
-    );
+  createEvent(eventData, userId) {
+    return eventsRepository.create({
+      ...validateEventData(eventData, { creating: true }),
+      organizer: userId,
+    });
   }
 
   async updateEvent(id, eventData) {
@@ -90,10 +91,6 @@ class EventsService {
       validateEventData(eventData),
     );
     return requireEvent(event);
-  }
-
-  async deleteEvent(id) {
-    return requireEvent(await eventsRepository.deleteById(id));
   }
 }
 

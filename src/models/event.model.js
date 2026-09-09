@@ -22,9 +22,9 @@ const eventSchema = new mongoose.Schema(
       trim: true,
     },
     organizer: {
-      type: String,
-      default: "",
-      trim: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
   },
   {
