@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 import app from "./app.js";
 import { createDatabase } from "./config/database.js";
-import { env } from "./config/env.js";
+import { env, validateEnv } from "./config/env.js";
 import { startApplication } from "./startApplication.js";
 
 const database = createDatabase({
@@ -13,6 +13,8 @@ const database = createDatabase({
 
 const startServer = async () => {
   try {
+    validateEnv(env);
+
     const application = await startApplication({
       app,
       database,

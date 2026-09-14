@@ -1,8 +1,18 @@
+import mongoose from "mongoose";
+
 import { Event } from "../models/event.model.js";
 
 export const authorizeEventOwnerOrAdmin = async (req, res, next) => {
     try {
         const eventId = req.params.id;
+
+        if (!mongoose.isValidObjectId(eventId)) {
+            return res.status(400).json({
+                status: "error",
+                message: "ID de evento inválido"
+            });
+        }
+
         const event = await Event.findById(eventId);
 
         if(!event) {

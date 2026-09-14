@@ -14,7 +14,7 @@ test("event authorization compares ObjectId ownership and allows admins", async 
     [{ id: new mongoose.Types.ObjectId().toString(), role: "organizer" }, false],
     [{ id: new mongoose.Types.ObjectId().toString(), role: "admin" }, true],
   ]) {
-    const req = { params: { id: "event" }, user };
+    const req = { params: { id: new mongoose.Types.ObjectId().toString() }, user };
     let continued = false;
     let status;
     const res = {

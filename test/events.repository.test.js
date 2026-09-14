@@ -7,7 +7,7 @@ import eventsRepository from "../src/repositories/events.repository.js";
 test("events repository delegates operations to the DAO", async (context) => {
   const calls = [];
   const originals = {};
-  for (const method of ["findAll", "findById", "create", "updateById"]) {
+  for (const method of ["findAll", "findById", "create", "updateById", "count"]) {
     originals[method] = eventsDao[method];
     eventsDao[method] = async (...args) => {
       calls.push([method, ...args]);
@@ -16,17 +16,22 @@ test("events repository delegates operations to the DAO", async (context) => {
   }
   context.after(() => Object.assign(eventsDao, originals));
 
-  assert.equal(await eventsRepository.findAll(), "findAll");
+  assert.equal(
+    await eventsRepository.findAll({ status: "draft" }, { limit: 10 }),
+    "findAll",
+  );
   assert.equal(await eventsRepository.findById("one"), "findById");
   assert.equal(await eventsRepository.create({ title: "New" }), "create");
   assert.equal(
     await eventsRepository.updateById("one", { title: "Updated" }),
     "updateById",
   );
+  assert.equal(await eventsRepository.count({ status: "draft" }), "count");
   assert.deepEqual(calls, [
-    ["findAll"],
+    ["findAll", { status: "draft" }, { limit: 10 }],
     ["findById", "one"],
     ["create", { title: "New" }],
     ["updateById", "one", { title: "Updated" }],
+    ["count", { status: "draft" }],
   ]);
 });

@@ -1,8 +1,8 @@
 import eventsDao from "../dao/events.dao.js";
 
 class EventsRepository {
-  findAll() {
-    return eventsDao.findAll();
+  findAll(filter = {}, options = {}) {
+    return eventsDao.findAll(filter, options);
   }
 
   findById(id) {
@@ -15,6 +15,10 @@ class EventsRepository {
 
   updateById(id, eventData) {
     return eventsDao.updateById(id, eventData);
+  }
+
+  count(filter = {}) {
+    return eventsDao.count(filter);
   }
 }
 

@@ -15,15 +15,22 @@ const stubModel = (context, stubs) => {
 
 test("events DAO executes Mongoose operations", async (context) => {
   const calls = [];
-  const lean = (value) => ({ lean: () => value });
+  const query = (value) => ({
+    populate() { return this; },
+    sort() { return this; },
+    skip() { return this; },
+    limit() { return this; },
+    lean() { return value; },
+  });
   stubModel(context, {
-    find: () => lean(["all"]),
-    findById: (id) => lean({ id }),
+    find: () => query(["all"]),
+    findById: (id) => query({ id }),
     create: async (data) => ({ toObject: () => ({ id: "new", ...data }) }),
     findByIdAndUpdate: (id, data, options) => {
       calls.push([id, data, options]);
-      return lean({ id, ...data });
+      return query({ id, ...data });
     },
+    countDocuments: async () => 1,
   });
 
   assert.deepEqual(await eventsDao.findAll(), ["all"]);
@@ -36,6 +43,7 @@ test("events DAO executes Mongoose operations", async (context) => {
     id: "one",
     title: "Updated",
   });
+  assert.equal(await eventsDao.count({ status: "draft" }), 1);
   assert.deepEqual(calls, [
     ["one", { title: "Updated" }, { new: true, runValidators: true }],
   ]);

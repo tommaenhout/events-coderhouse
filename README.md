@@ -114,9 +114,13 @@ solamente después de establecer la conexión con MongoDB.
 | Campo | Tipo | Obligatorio | Descripción |
 | --- | --- | --- | --- |
 | `title` | `String` | Sí | Nombre del evento |
-| `date` | `Date` | Sí | Fecha válida en formato ISO 8601 |
-| `description` | `String` | No | Descripción del evento |
-| `location` | `String` | No | Ubicación |
+| `description` | `String` | Sí | Descripción del evento |
+| `category` | `String` | Sí | Categoría del evento |
+| `date` | `Date` | Sí | Fecha futura válida en formato ISO 8601 |
+| `location` | `String` | Sí | Ubicación |
+| `capacity` | `Number` | Sí | Capacidad mayor que cero |
+| `price` | `Number` | Sí | Precio igual o mayor que cero |
+| `status` | `String` | No | `draft`, `published`, `cancelled` o `finished`; por defecto `draft` |
 | `organizer` | `ObjectId` | Sí | Referencia a User, asignada automáticamente al usuario autenticado; no se puede modificar |
 
 Mongoose agrega automáticamente `createdAt` y `updatedAt`. Los campos que no
@@ -158,15 +162,16 @@ modificar cualquier evento.
 | Método | Ruta | Acceso requerido |
 | --- | --- | --- |
 | `GET` | `/api/sessions/current` | Cualquier usuario autenticado |
-| `GET` | `/api/events/:id` | Cualquier usuario autenticado |
 | `POST` | `/api/events` | `organizer` o `admin` |
 | `PUT` | `/api/events/:id` | `organizer` propietario del evento o `admin` |
+| `PATCH` | `/api/events/:id/status` | `organizer` propietario del evento o `admin` |
 | `GET` | `/api/users` | Solo `admin` |
 
-Las rutas de eventos y usuarios ejecutan primero `authMiddleware`, que valida el
-JWT almacenado en la cookie `currentUser` y asigna su contenido a `req.user`.
-Después, `authorizeRoles` compara `req.user.role` con los roles permitidos para
-la operación. La ruta `/api/sessions/current` también valida el JWT de la cookie
+Las rutas `GET /api/events` y `GET /api/events/:id` son públicas. Las rutas de
+creación, actualización y cambio de estado ejecutan `authMiddleware`, que valida
+el JWT almacenado en la cookie `currentUser` y asigna su contenido a `req.user`.
+Después, `authorizeRoles` y `authorizeEventOwnerOrAdmin` comprueban el rol y la
+propiedad del evento. La ruta `/api/sessions/current` también valida el JWT
 mediante la estrategia `current` de Passport.
 
 ### Diferencia entre 401 y 403
@@ -204,9 +209,10 @@ Por ejemplo, un usuario con rol `user` recibe `403` al ejecutar
 | --- | --- | --- | --- |
 | `GET` | `/api/health` | Comprueba el estado del servidor | `200` |
 | `GET` | `/api/events` | Lista todos los eventos | `200` |
-| `GET` | `/api/events/:id` | Obtiene un evento | `200`, `400`, `401`, `404` |
+| `GET` | `/api/events/:id` | Obtiene un evento públicamente | `200`, `400`, `404` |
 | `POST` | `/api/events` | Crea un evento | `201`, `400`, `401`, `403` |
 | `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `401`, `403`, `404` |
+| `PATCH` | `/api/events/:id/status` | Cambia el estado sin eliminar el evento | `200`, `400`, `401`, `403`, `404` |
 | `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
 | `POST` | `/api/sessions/login` | Autentica un usuario y crea una cookie JWT | `200`, `401`, `500` |
 | `GET` | `/api/sessions/current` | Devuelve el usuario autenticado | `200`, `401` |
@@ -270,8 +276,11 @@ curl --request POST "$BASE_URL/events" \
   --data '{
     "title": "Conferencia de JavaScript",
     "description": "Encuentro para desarrolladores",
-    "date": "2026-09-01T18:00:00.000Z",
-    "location": "Buenos Aires"
+    "category": "conference",
+    "date": "2099-09-01T18:00:00.000Z",
+    "location": "Buenos Aires",
+    "capacity": 200,
+    "price": 15000
   }'
 ```
 
@@ -287,6 +296,18 @@ Listar todos los eventos:
 curl "$BASE_URL/events"
 ```
 
+El listado siempre está paginado. Admite los filtros `status`, `category`,
+`location`, `dateFrom` y `dateTo`; `page` y `limit` controlan la paginación, y
+`sort` admite `date`, `price`, `title`, `category` o `location`. Un prefijo `-`
+ordena de manera descendente:
+
+```bash
+curl "$BASE_URL/events?status=published&category=workshop&page=2&limit=5&sort=-date"
+```
+
+La respuesta contiene `data`, `page`, `limit`, `total` y `totalPages` dentro de
+`payload`.
+
 Obtener un evento:
 
 ```bash
@@ -297,12 +318,35 @@ Actualizar campos del evento:
 
 ```bash
 curl --request PUT "$BASE_URL/events/$EVENT_ID" \
+  --cookie cookies.txt \
   --header "Content-Type: application/json" \
   --data '{
     "title": "Conferencia de JavaScript actualizada",
     "location": "Palermo, Buenos Aires"
   }'
 ```
+
+Cambiar el estado de un evento propio (o de cualquier evento siendo `admin`):
+
+```bash
+curl --request PATCH "$BASE_URL/events/$EVENT_ID/status" \
+  --cookie cookies.txt \
+  --header "Content-Type: application/json" \
+  --data '{"status":"cancelled"}'
+```
+
+### Reglas de negocio de eventos
+
+- `organizer` se toma del usuario autenticado; un valor enviado en el body se ignora.
+- Solo `organizer` y `admin` pueden crear eventos.
+- Un organizador solo puede actualizar o cambiar el estado de sus propios eventos;
+  un administrador puede gestionar cualquier evento.
+- La fecha de creación debe ser futura, `capacity` debe ser mayor que cero y
+  `price` debe ser igual o mayor que cero.
+- Un evento cancelado no puede modificarse ni cambiar nuevamente de estado.
+- Un evento finalizado no puede volver a publicarse.
+- Cancelar significa cambiar `status` a `cancelled`; los eventos no se eliminan
+  físicamente.
 
 Registrar un usuario mediante sesiones:
 

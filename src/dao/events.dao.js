@@ -1,12 +1,26 @@
 import { Event } from "../models/event.model.js";
 
+const organizerProjection = "first_name last_name role";
+
 class EventsDao {
-  findAll() {
-    return Event.find().lean();
+  findAll(filter = {}, { skip = 0, limit = 10, sort = { date: 1 } } = {}) {
+    return Event.find(filter)
+      .populate("organizer", organizerProjection)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean();
   }
 
   findById(id) {
-    return Event.findById(id).lean();
+    return Event.findById(id).populate("organizer", organizerProjection).lean();
+  }
+
+  updateById(id, eventData) {
+    return Event.findByIdAndUpdate(id, eventData, {
+      new: true,
+      runValidators: true,
+    }).populate("organizer", organizerProjection).lean();
   }
 
   async create(eventData) {
@@ -14,12 +28,10 @@ class EventsDao {
     return event.toObject();
   }
 
-  updateById(id, eventData) {
-    return Event.findByIdAndUpdate(id, eventData, {
-      new: true,
-      runValidators: true,
-    }).lean();
+  async count(filter) {
+    return Event.countDocuments(filter);
   }
+
 }
 
 export default new EventsDao();

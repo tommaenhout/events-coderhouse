@@ -1,9 +1,9 @@
 import eventsService from "../services/events.service.js";
 import { handleServiceError } from "../utils/handleServiceError.js";
 
-export const getEvents = async (_req, res, next) => {
+export const getEvents = async (req, res, next) => {
   try {
-    const events = await eventsService.getEvents();
+    const events = await eventsService.getEvents(req.query);
     return res.status(200).json({ status: "success", payload: events });
   } catch (error) {
     return handleServiceError(error, res, next);
@@ -31,6 +31,15 @@ export const createEvent = async (req, res, next) => {
 export const updateEvent = async (req, res, next) => {
   try {
     const event = await eventsService.updateEvent(req.params.id, req.body);
+    return res.status(200).json({ status: "success", payload: event });
+  } catch (error) {
+    return handleServiceError(error, res, next);
+  }
+};
+
+export const changeEventStatus = async (req, res, next) => {
+  try {
+    const event = await eventsService.changeStatus(req.params.id, req.body?.status);
     return res.status(200).json({ status: "success", payload: event });
   } catch (error) {
     return handleServiceError(error, res, next);

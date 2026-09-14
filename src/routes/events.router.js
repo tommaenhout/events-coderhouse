@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  changeEventStatus,
   createEvent,
   getEventById,
   getEvents,
@@ -14,7 +15,8 @@ const eventsRouter = Router();
 
 eventsRouter.post("/", authMiddleware, authorizeRoles(["admin", "organizer"]), createEvent);
 eventsRouter.get("/", getEvents);
-eventsRouter.get("/:id", authMiddleware, getEventById);
+eventsRouter.get("/:id", getEventById);
 eventsRouter.put("/:id", authMiddleware, authorizeRoles(["admin", "organizer"]), authorizeEventOwnerOrAdmin, updateEvent);
+eventsRouter.patch("/:id/status", authMiddleware, authorizeRoles(["admin", "organizer"]), authorizeEventOwnerOrAdmin, changeEventStatus);
 
 export default eventsRouter;
