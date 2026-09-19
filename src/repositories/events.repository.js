@@ -20,6 +20,12 @@ class EventsRepository {
   count(filter = {}) {
     return eventsDao.count(filter);
   }
+  reserveSeats(eventId, seats){
+    return eventsDao.reserveSeats(eventId, seats);
+  }
+  releaseSeats(eventId, seats){
+    return eventsDao.releaseSeats(eventId, seats);
+  }
 }
 
 export default new EventsRepository();
