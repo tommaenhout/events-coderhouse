@@ -13,14 +13,12 @@ export class TicketsDao {
     async findByUser(userId){
         return Ticket.find({user:userId})
         .populate('event')
-        .sort({ createdAt: -1 })
-        .lean();
+        .sort({ createdAt: -1 });
     }
     async findByEvent(eventId){
         return Ticket.find({event:eventId})
         .populate('user', 'first_name last_name email')
-        .sort({ createdAt: -1 })
-        .lean();
+        .sort({ createdAt: -1 });
     }
     async save(ticket) {
         return ticket.save();

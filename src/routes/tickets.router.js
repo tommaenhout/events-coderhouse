@@ -12,9 +12,9 @@ import {
 
 const ticketsRouter = Router();
 
-ticketsRouter.post('event/:eid/enroll', authMiddleware, enroll);
+ticketsRouter.post('/event/:eid/enroll', authMiddleware, enroll);
 ticketsRouter.get('/my-tickets', authMiddleware, getTicketsFromUser);
-ticketsRouter.get('event/:eid/tickets', authMiddleware, authorizeRoles(['admin', 'organizer']), getTicketsByEvent);
+ticketsRouter.get('/event/:eid/tickets', authMiddleware, authorizeRoles(['admin', 'organizer']), getTicketsByEvent);
 ticketsRouter.patch('/:tid/cancel', authMiddleware, cancelTicket);
 
 export default ticketsRouter;

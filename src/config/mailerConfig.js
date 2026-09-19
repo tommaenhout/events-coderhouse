@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-const port = process.env.MAIL_PORT || 587;
+const port = Number(process.env.MAIL_PORT) || 587;
 
 export const mailerConfig = {
     host: process.env.MAIL_HOST || 'smtp.gmail.com',

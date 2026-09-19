@@ -7,11 +7,11 @@ class EmailService {
         return this.#send({
             from: from,
             to: user.email,
-            subject: `Inscripción confirmada para ${event.name}`,
+            subject: `Inscripción confirmada para ${event.title}`,
             html: `
                 <strong>Ticket Confirmation</strong>
-                <p>Hola ${user.name},</p>
-                <p>Tu inscripción para el evento "${event.name}" ha sido confirmada.</p>
+                <p>Hola ${user.first_name},</p>
+                <p>Tu inscripción para el evento "${event.title}" ha sido confirmada.</p>
                 <p>Fecha del evento: ${event.date}</p>
                 <p>ID del ticket: ${ticket.id}</p>
             `
@@ -21,11 +21,11 @@ class EmailService {
         return this.#send({
             from: from,
             to: user.email,
-            subject: `Inscripción cancelada para ${event.name}`,
+            subject: `Inscripción cancelada para ${event.title}`,
             html: `
                 <strong>Ticket Cancellation</strong>
-                <p>Hola ${user.name},</p>
-                <p>Tu inscripción para el evento "${event.name}" ha sido cancelada.</p>
+                <p>Hola ${user.first_name},</p>
+                <p>Tu inscripción para el evento "${event.title}" ha sido cancelada.</p>
                 <p>Fecha del evento: ${event.date}</p>
                 <p>ID del ticket: ${ticket.id}</p>
             `
