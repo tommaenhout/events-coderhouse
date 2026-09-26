@@ -7,6 +7,9 @@ class TicketsRepository {
   create(ticketData) {
     return this.ticketsDao.create(ticketData);
   }
+  isValidId(id) {
+    return this.ticketsDao.isValidId(id);
+  }
   findByUserAndEvent(userId, eventId, status) {
     return this.ticketsDao.findByUserAndEvent(userId, eventId, status);
   }
@@ -19,12 +22,19 @@ class TicketsRepository {
   findByEvent(eventId) {
     return this.ticketsDao.findByEvent(eventId);
   }
-  save(ticket) {
-    return this.ticketsDao.save(ticket);
+  cancelTicket(ticketId, cancelledAt = new Date()) {
+    return this.ticketsDao.updateById(ticketId, {
+      status: "cancelled",
+      cancelledAt,
+    });
   }
   sumReservedByEvent(eventId) {
     return this.ticketsDao.sumReservedByEvent(eventId);
   } 
+
+  countActiveTickets(eventId) {
+    return this.ticketsDao.sumReservedByEvent(eventId);
+  }
 
 }
 

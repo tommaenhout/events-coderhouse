@@ -1,9 +1,7 @@
-import mongoose from 'mongoose';
 import ticketRepository from '../repositories/ticket.repository.js';
 import eventsRepository from '../repositories/events.repository.js';
 import emailService from '../services/email.service.js';
 import { generateTicketCode } from '../utils/ticketCode.js';
-import e from 'express';
 
 const businessError = (message, statusCode = 400) => 
         Object.assign(new Error(message), { statusCode });
@@ -17,7 +15,7 @@ class TicketService {
     }
 
     validateObjectId(id) {
-        if (!mongoose.isValidObjectId(id)) {
+        if (!this.ticketRepository.isValidId(id)) {
             throw businessError('ID de ticket inválido', 400);
         }
     }
@@ -49,7 +47,7 @@ class TicketService {
         const existingTicket = await this.ticketRepository.findByUserAndEvent(user.id, eventId, 'confirmed');
         
         if (existingTicket) {
-            throw businessError('El usuario ya tiene un ticket confirmado para este evento', 400);
+            throw businessError('El usuario ya tiene un ticket confirmado para este evento', 409);
         }
 
         const reservedEvent = await this.eventsRepository.reserveSeats(event._id, seats);
@@ -81,8 +79,17 @@ class TicketService {
         return this.ticketRepository.findByUser(user.id);
     }
 
-    async getTicketsByEvent(eventId) {
+    async getTicketsByEvent(eventId, user) {
         this.validateObjectId(eventId);
+        const event = await this.eventsRepository.findById(eventId);
+        if (!event) {
+            throw businessError('Evento no encontrado', 404);
+        }
+        const organizerId = event.organizer?._id ?? event.organizer;
+        const isOwner = organizerId?.toString() === user.id;
+        if (user.role !== 'admin' && !isOwner) {
+            throw businessError('Acceso denegado', 403);
+        }
         return this.ticketRepository.findByEvent(eventId);
     }
     async cancelTicket(user, ticketId) {
@@ -100,16 +107,13 @@ class TicketService {
         if(existantTicket.status === 'cancelled'){
             throw businessError('El ticket ya ha sido cancelado', 400);
         }
-        existantTicket.status = 'cancelled';
-        existantTicket.cancelledAt = new Date();
-
-        const cancelledTicket = await this.ticketRepository.save(existantTicket);
+        const cancelledTicket = await this.ticketRepository.cancelTicket(ticketId, new Date());
 
         const eventId = existantTicket.event._id
 
         await this.eventsRepository.releaseSeats(eventId, existantTicket.quantity);
 
-        await this.emailService.sendTicketCancellation(user, existantTicket.event, existantTicket);
+        await this.emailService.sendTicketCancellation(user, existantTicket.event, cancelledTicket);
 
         return cancelledTicket;
     }

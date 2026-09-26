@@ -1,5 +1,13 @@
 export const createErrorHandler = ({ logger = console } = {}) =>
   (error, _req, res, _next) => {
+    if (Number.isInteger(error.statusCode)) {
+      if (error.statusCode >= 500) logger.error(error);
+      res.status(error.statusCode).json({
+        status: "error",
+        message: error.statusCode >= 500 ? "Error interno del servidor" : error.message,
+      });
+      return;
+    }
     const isBadRequest =
       error.name === "CastError" ||
       error.name === "ValidationError" ||

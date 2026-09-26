@@ -39,7 +39,6 @@ class EmailService {
                 subject,
                 html
             });
-            console.log('Email sent: ' + info.response);
             return Promise.resolve(info);
         } catch (error) {
             console.error('Error sending email: ' + error.message);

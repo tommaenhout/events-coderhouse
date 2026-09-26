@@ -3,8 +3,9 @@ import {
   UserValidationError,
 } from "../errors/users.errors.js";
 import usersRepository from "../repositories/users.repository.js";
-import { createHash } from "../utils/hash.js";
+import { createHash, validatePassword } from "../utils/hash.js";
 import { pickFields } from "../utils/pickFields.js";
+import { InvalidCredentialsError } from "../errors/sessions.errors.js";
 
 const userFields = ["first_name", "last_name", "email", "password", "role"];
 const allowedRoles = new Set(["user", "organizer", "admin"]);
@@ -65,6 +66,19 @@ const withoutPassword = (user) => {
 };
 
 class UsersService {
+  async authenticate(email, password) {
+    const normalizedEmail = typeof email === "string" ? email.toLowerCase().trim() : "";
+    const user = await usersRepository.findByEmail(normalizedEmail);
+    if (!user || !(await validatePassword(password, user.password))) {
+      throw new InvalidCredentialsError();
+    }
+    return user;
+  }
+
+  findAuthenticatedUser(id) {
+    return usersRepository.findById(id);
+  }
+
   async registerUser(userData) {
     const data = validateUserData(userData);
 

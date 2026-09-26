@@ -213,6 +213,10 @@ Por ejemplo, un usuario con rol `user` recibe `403` al ejecutar
 | `POST` | `/api/events` | Crea un evento | `201`, `400`, `401`, `403` |
 | `PUT` | `/api/events/:id` | Actualiza uno o más campos | `200`, `400`, `401`, `403`, `404` |
 | `PATCH` | `/api/events/:id/status` | Cambia el estado sin eliminar el evento | `200`, `400`, `401`, `403`, `404` |
+| `POST` | `/api/tickets/event/:eid/enroll` | Inscribe al usuario autenticado en un evento | `201`, `400`, `401`, `404`, `409` |
+| `GET` | `/api/tickets/my-tickets` | Lista las inscripciones del usuario autenticado | `200`, `401` |
+| `GET` | `/api/tickets/event/:eid/tickets` | Lista inscripciones; propietario del evento o admin | `200`, `400`, `401`, `403`, `404` |
+| `PATCH` | `/api/tickets/:tid/cancel` | Cancela una inscripción propia o como admin | `200`, `400`, `401`, `403`, `404` |
 | `POST` | `/api/sessions/register` | Registra un usuario | `201`, `400`, `409` |
 | `POST` | `/api/sessions/login` | Autentica un usuario y crea una cookie JWT | `200`, `401`, `500` |
 | `GET` | `/api/sessions/current` | Devuelve el usuario autenticado | `200`, `401` |
@@ -444,21 +448,29 @@ Event model -> event DAO -> event repository -> events service
              -> events controller -> events router -> app
 User model  -> user DAO  -> user repository  -> users service
              -> users controller -> users router -> app
+Ticket model -> ticket DAO -> ticket repository -> ticket service
+              -> tickets controller -> tickets router -> app
 Passport config -> register/login/current strategies -> sessions middleware
                 -> sessions controller -> sessions router -> app
 ```
 
 - Los routers importan sus controladores.
-- Los controladores importan sus servicios.
-- Los servicios importan sus repositorios.
-- Los repositorios importan sus DAO.
-- Los DAO importan los modelos de Mongoose.
-- El registro reutiliza `UsersService`; login y current reutilizan el repositorio
-  de usuarios.
+- Los controladores solo leen `params`, `query`, `body` y el usuario autenticado,
+  llaman a un servicio y construyen la respuesta HTTP.
+- Los servicios concentran validaciones, cupos, estados, duplicados, permisos y
+  notificaciones; consumen repositorios y nunca modelos o DAO.
+- Los repositorios traducen operaciones del dominio (`findByEmail`, reserva de
+  cupos, cancelación de tickets) a llamadas al DAO correspondiente.
+- Los DAO son la única capa que importa modelos de Mongoose y ejecuta consultas.
+- Los DTO de usuario, evento y ticket definen cada respuesta pública. También
+  filtran documentos relacionados obtenidos con `populate`, por lo que nunca se
+  serializa un `password`.
+- Registro, login y current reutilizan `UsersService`.
 - Passport Local procesa registro y login; Passport JWT protege `/current`.
 - `jwt.js` centraliza la creación y verificación de los tokens.
 - `hash.js` centraliza el hash y la comparación de contraseñas con bcrypt.
-- `errorHandler` centraliza los errores de Express y recibe el logger.
+- `errorHandler` centraliza los errores de Express y conserva la distinción entre
+  400, 401, 403, 404, 409 y 500.
 - `app` importa los routers y configura Express.
 - `server.js` conecta MongoDB e inicia la aplicación.
 - `pickFields` es una utilidad reutilizable para aceptar únicamente campos
@@ -555,4 +567,6 @@ Las pruebas verifican las consultas del DAO, la delegación del repositorio, las
 reglas del servicio y las respuestas del controlador. También cubren las
 estrategias Passport de registro, login y current, la cookie de autenticación,
 la generación y verificación de JWT, logout, middleware, utilidades y ciclo de
-vida de la aplicación. No se conectan a MongoDB Atlas.
+vida de la aplicación. Para tickets se prueban inscripción, duplicados, cupos,
+rollback ante fallos, permisos, consultas, cancelación, emails, DTO y contratos
+HTTP. No se conectan a MongoDB Atlas.

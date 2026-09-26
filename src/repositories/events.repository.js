@@ -1,6 +1,9 @@
 import eventsDao from "../dao/events.dao.js";
 
 class EventsRepository {
+  isValidId(id) {
+    return eventsDao.isValidId(id);
+  }
   findAll(filter = {}, options = {}) {
     return eventsDao.findAll(filter, options);
   }
@@ -25,6 +28,10 @@ class EventsRepository {
   }
   releaseSeats(eventId, seats){
     return eventsDao.releaseSeats(eventId, seats);
+  }
+
+  async findPublishedEvents(options = {}) {
+    return eventsDao.findAll({ status: "published" }, options);
   }
 }
 

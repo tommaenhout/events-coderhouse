@@ -4,8 +4,7 @@ import { ExtractJwt, Strategy as JWTStrategy } from "passport-jwt";
 
 import { env } from "./env.js";
 import usersService from "../services/users.service.js";
-import usersRepository from "../repositories/users.repository.js";
-import { validatePassword } from "../utils/hash.js";
+import { InvalidCredentialsError } from "../errors/sessions.errors.js";
 
 passport.use(
   "register",
@@ -18,14 +17,13 @@ passport.use(
     async (req, email, password, done) => {
       try {
         const { first_name, last_name } = req.body;
-        const newUser = await usersService.registerUser({
+        const user = await usersService.registerUser({
           first_name,
           last_name,
           email,
           password,
         });
-
-        return done(null, newUser);
+        return done(null, user);
       } catch (error) {
         return done(error);
       }
@@ -34,40 +32,23 @@ passport.use(
 );
 
 passport.use(
-    "login",
-    new LocalStrategy(
-        {
-            usernameField: "email",
-            passwordField: "password"
-        },
-        async (email, password, done) => {
-            try {
-                const normalizedEmail = email.toLowerCase().trim();
-                const user = await usersRepository.findByEmail(normalizedEmail);
-                if (!user) {
-                    return done(null, false, { message: "credenciales inválidas" });
-                }
-
-                const isPasswordValid = await validatePassword(password, user.password);
-
-                if (!isPasswordValid) {
-                    return done(null, false, { message: "credenciales inválidas" });
-                }
-
-                return done(null, user);
-            } catch (error) {
-                return done(error);
-            }
+  "login",
+  new LocalStrategy(
+    { usernameField: "email", passwordField: "password" },
+    async (email, password, done) => {
+      try {
+        return done(null, await usersService.authenticate(email, password));
+      } catch (error) {
+        if (error instanceof InvalidCredentialsError) {
+          return done(null, false, { message: "credenciales inválidas" });
         }
-    )
-)
+        return done(error);
+      }
+    },
+  ),
+);
 
-const cookieExtractor = (req) => {
-  if (req && req.cookies && req.cookies.currentUser) {
-    return req.cookies.currentUser;
-  }
-  return null;
-};
+const cookieExtractor = (req) => req?.cookies?.currentUser ?? null;
 
 passport.use(
   "current",
@@ -78,7 +59,7 @@ passport.use(
     },
     async (payload, done) => {
       try {
-        const user = await usersRepository.findById(payload.id);
+        const user = await usersService.findAuthenticatedUser(payload.id);
         if (!user) {
           return done(null, false, { message: "Usuario no encontrado" });
         }

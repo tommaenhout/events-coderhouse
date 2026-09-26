@@ -1,5 +1,3 @@
-import mongoose from "mongoose";
-
 import eventsRepository from "../repositories/events.repository.js";
 import { pickFields } from "../utils/pickFields.js";
 
@@ -16,6 +14,7 @@ export class EventValidationError extends Error {
   constructor(message) {
     super(message);
     this.name = "EventValidationError";
+    this.statusCode = 400;
   }
 }
 
@@ -23,11 +22,20 @@ export class EventNotFoundError extends Error {
   constructor() {
     super("Evento no encontrado");
     this.name = "EventNotFoundError";
+    this.statusCode = 404;
+  }
+}
+
+export class EventForbiddenError extends Error {
+  constructor() {
+    super("Acceso denegado");
+    this.name = "EventForbiddenError";
+    this.statusCode = 403;
   }
 }
 
 const validateObjectId = (id) => {
-  if (!mongoose.isValidObjectId(id)) {
+  if (!eventsRepository.isValidId(id)) {
     throw new EventValidationError("ID de evento inválido");
   }
 };
@@ -126,6 +134,17 @@ const parseFilterDate = (date, field) => {
 };
 
 class EventsService {
+  async authorizeManagement(id, user) {
+    validateObjectId(id);
+    const event = requireEvent(await eventsRepository.findById(id));
+    const organizerId = event.organizer?._id ?? event.organizer;
+    const isOwner = organizerId?.toString() === user.id;
+    if (user.role !== "admin" && !isOwner) {
+      throw new EventForbiddenError();
+    }
+    return event;
+  }
+
   async getEvents(query = {}) {
     const {
       status, category, location, dateFrom, dateTo,
